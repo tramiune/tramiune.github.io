@@ -1,6 +1,3 @@
-<!-- =========================
-File: dev/video_editor.html
-========================= -->
 <!doctype html>
 <html lang="vi">
 <head>
@@ -23,7 +20,7 @@ File: dev/video_editor.html
         label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:10px 0;font-size:13px}
         input[type="range"]{width:60%}
         input[type="number"], input[type="password"]{
-          width:140px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px
+          width:150px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px
         }
         button,a.btn{
           border:1px solid var(--bd);background:#fff;padding:8px 10px;border-radius:10px;cursor:pointer;
@@ -33,6 +30,7 @@ File: dev/video_editor.html
         .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
         .status{white-space:pre-wrap;font-size:12px;color:var(--mut);margin-top:10px}
         hr{border:none;border-top:1px solid var(--bd);margin:14px 0}
+        .warn{border:1px solid #f0c1c1;background:#fff6f6;padding:8px 10px;border-radius:12px;font-size:12px;color:#7a2a2a;margin-top:10px}
     </style>
 </head>
 <body>
@@ -53,7 +51,8 @@ File: dev/video_editor.html
     <div class="card">
         <div class="hd">Preview video</div>
         <div class="ct">
-            <video id="v" controls playsinline></video>
+            <!-- CORS: crossorigin must be on element -->
+            <video id="v" controls playsinline crossorigin="anonymous"></video>
 
             <div class="row" style="margin-top:10px">
                 <button id="seekPrev">⏪ -0.1s</button>
@@ -69,6 +68,8 @@ File: dev/video_editor.html
                 <input id="scrub" type="range" min="0" max="0" step="0.033" value="0"/>
                 <span class="k" id="scrubVal">0.000</span>
             </label>
+
+            <div class="warn" id="corsNote" style="display:none"></div>
         </div>
     </div>
 
@@ -119,7 +120,7 @@ File: dev/video_editor.html
     /** Repo config */
     const OWNER = "tramiune";
     const REPO  = "tramiune001_res_wallpaper";
-    const BRANCH = "main";          // nếu repo bạn là master thì đổi lại
+    const BRANCH = "main";          // đổi nếu repo bạn là master
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
@@ -129,6 +130,7 @@ File: dev/video_editor.html
 
     const info = document.getElementById("info");
     const statusEl = document.getElementById("status");
+    const corsNote = document.getElementById("corsNote");
     const tEl = document.getElementById("t");
     const durEl = document.getElementById("dur");
     const scrub = document.getElementById("scrub");
@@ -144,6 +146,11 @@ File: dev/video_editor.html
     const rememberEl = document.getElementById("remember");
 
     function setStatus(s){ statusEl.textContent = s || ""; }
+    function setWarn(s){
+      if (!s) { corsNote.style.display = "none"; corsNote.textContent = ""; return; }
+      corsNote.style.display = "block";
+      corsNote.textContent = s;
+    }
 
     function qs() {
       const p = new URLSearchParams(location.search);
@@ -151,11 +158,11 @@ File: dev/video_editor.html
         mode: p.get("mode") || "edit",        // edit | replaceImage
         folder: p.get("folder") || "",
         video: p.get("video") || "",
-        target: p.get("target") || ""         // anime_001.webp
+        target: p.get("target") || ""
       };
     }
 
-    function mediaUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
+    function mediaUrlCdn(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
     function baseName(file){
       const i = file.lastIndexOf(".");
       return i >= 0 ? file.slice(0, i) : file;
@@ -181,11 +188,7 @@ File: dev/video_editor.html
       v.pause();
       v.currentTime = t;
 
-      await new Promise(resolve => {
-        const onSeeked = () => { v.removeEventListener("seeked", onSeeked); resolve(); };
-        v.addEventListener("seeked", onSeeked, { once: true });
-      });
-
+      await new Promise(resolve => v.addEventListener("seeked", resolve, { once:true }));
       drawFrameToCanvas();
       updateUI();
     }
@@ -266,6 +269,8 @@ File: dev/video_editor.html
       });
       return String(dataUrl).split(",")[1];
     }
+
+    /** ✅ Replace target webp on GitHub */
     async function replaceWebpOnGitHub(folder, targetFileName, webpBlob) {
       const token = getAuthToken();
       const filePath = `${ROOT_DIR}/${folder}/${targetFileName}`;
@@ -278,15 +283,34 @@ File: dev/video_editor.html
       await ghPutJson(
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`,
         token,
-        {
-          message: `Update ${filePath}`,
-          content,
-          sha,           // replace (ghi đè)
-          branch: BRANCH
-        }
+        { message: `Update ${filePath}`, content, sha, branch: BRANCH }
       );
 
       setStatus(`✅ Replaced on GitHub\n${filePath}`);
+    }
+
+    /** ✅ Load video as Blob via GitHub API (no CORS/taint) */
+    async function loadVideoViaGitHubApi(folder, fileName) {
+      const token = getAuthToken();
+      const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
+      const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
+
+      setStatus(`Fetching video via GitHub API...\n${filePath}`);
+
+      const meta = await ghGetJson(url, token);
+      if (!meta?.download_url) throw new Error("Không có download_url (file private?)");
+
+      // download_url là public raw, vẫn có thể CORS; nhưng ta fetch thành blob tại origin của page → canvas OK
+      const res = await fetch(meta.download_url);
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`Download video failed: HTTP ${res.status}\n${txt}`);
+      }
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      setStatus("");
+      return blobUrl;
     }
 
     /** ---------- UI actions ---------- */
@@ -299,51 +323,68 @@ File: dev/video_editor.html
     scrub.addEventListener("input", ()=> { scrubVal.textContent = Number(scrub.value).toFixed(3); });
     scrub.addEventListener("change", ()=> seekTo(Number(scrub.value) || 0));
 
-    document.getElementById("downloadWebp").onclick = async () => {
-      const { video } = qs();
-      const out = `${baseName(video)}.webp`;
+    async function canvasToWebpBlob(quality) {
       drawFrameToCanvas();
-      setStatus(`Capturing frame...\n→ ${out}`);
-      const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", 0.92));
-      if (!blob) throw new Error("toBlob failed (webp not supported?)");
-      downloadBlob(blob, out);
-      setStatus(`✅ Saved\n${out}`);
+      try {
+        const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", quality));
+        if (!blob) throw new Error("toBlob failed (webp not supported?)");
+        return blob;
+      } catch (e) {
+        // tainted canvas message
+        throw new Error(`toBlob failed: ${String(e?.message || e)}\n\nFix: load video via GitHub API (token) để tránh CORS taint.`);
+      }
+    }
+
+    document.getElementById("downloadWebp").onclick = async () => {
+      try {
+        const { video } = qs();
+        const out = `${baseName(video)}.webp`;
+        setStatus(`Capturing frame...\n→ ${out}`);
+        const blob = await canvasToWebpBlob(0.92);
+        downloadBlob(blob, out);
+        setStatus(`✅ Saved\n${out}`);
+      } catch (e) {
+        alert(String(e?.message || e));
+      }
     };
 
     document.getElementById("downloadPreview").onclick = async () => {
-      const { video } = qs();
-      const out = `${baseName(video)}_preview.webp`;
+      try {
+        const { video } = qs();
+        const out = `${baseName(video)}_preview.webp`;
 
-      drawFrameToCanvas();
-      const targetW = 360;
-      const scale = targetW / c.width;
-      const w = Math.max(1, Math.round(c.width * scale));
-      const h = Math.max(1, Math.round(c.height * scale));
+        // scale nhỏ để làm preview
+        drawFrameToCanvas();
+        const targetW = 360;
+        const scale = targetW / c.width;
+        const w = Math.max(1, Math.round(c.width * scale));
+        const h = Math.max(1, Math.round(c.height * scale));
 
-      const tmp = document.createElement("canvas");
-      tmp.width = w; tmp.height = h;
-      tmp.getContext("2d").drawImage(c, 0, 0, w, h);
+        const tmp = document.createElement("canvas");
+        tmp.width = w; tmp.height = h;
+        tmp.getContext("2d").drawImage(c, 0, 0, w, h);
 
-      setStatus(`Capturing preview...\n→ ${out}`);
-      const blob = await new Promise(resolve => tmp.toBlob(resolve, "image/webp", 0.85));
-      if (!blob) throw new Error("toBlob failed (webp not supported?)");
-      downloadBlob(blob, out);
-      setStatus(`✅ Saved\n${out}`);
+        setStatus(`Capturing preview...\n→ ${out}`);
+        const blob = await new Promise(resolve => tmp.toBlob(resolve, "image/webp", 0.85));
+        if (!blob) throw new Error("toBlob failed (webp not supported?)");
+        downloadBlob(blob, out);
+        setStatus(`✅ Saved\n${out}`);
+      } catch (e) {
+        alert(String(e?.message || e));
+      }
     };
 
     document.getElementById("replaceWebp").onclick = async () => {
       try {
-        const { mode, folder, target, video } = qs();
-        if (mode !== "replaceImage") {
-          throw new Error("Nút Replace chỉ dùng khi mở từ Update (mode=replaceImage).");
-        }
-        if (!folder || !target || !video) throw new Error("Thiếu folder/video/target.");
+        const { mode, folder, target } = qs();
+        if (mode !== "replaceImage") throw new Error("Replace chỉ dùng khi mở từ nút Update (mode=replaceImage).");
+        if (!folder || !target) throw new Error("Thiếu folder/target.");
 
-        drawFrameToCanvas();
-        const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", 0.92));
-        if (!blob) throw new Error("toBlob failed (webp not supported?)");
-
+        const blob = await canvasToWebpBlob(0.92);
         await replaceWebpOnGitHub(folder, target, blob);
+
+        // optional: tự reload trang opener
+        try { window.opener?.location?.reload?.(); } catch {}
       } catch (e) {
         alert(String(e?.message || e));
       }
@@ -376,10 +417,7 @@ File: dev/video_editor.html
       rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
 
       let rafId = 0;
-      const drawLoop = () => {
-        drawFrameToCanvas();
-        rafId = requestAnimationFrame(drawLoop);
-      };
+      const drawLoop = () => { drawFrameToCanvas(); rafId = requestAnimationFrame(drawLoop); };
 
       v.pause();
       v.currentTime = start;
@@ -429,7 +467,34 @@ File: dev/video_editor.html
       info.textContent = `${folder}/${video} · mode=${mode}`;
       targetLabel.textContent = target ? target : "(none)";
 
-      v.src = mediaUrl(folder, video);
+      // MUST set crossOrigin before src
+      v.crossOrigin = "anonymous";
+
+      // Strategy:
+      // - replaceImage: luôn dùng GitHub API (blob url) để tránh tainted canvas
+      // - edit: nếu có token thì cũng dùng API cho chắc; nếu không thì dùng CDN
+      try {
+        let src;
+        if (mode === "replaceImage") {
+          setWarn("Mode replaceImage: video sẽ được tải qua GitHub API (token) để tránh lỗi CORS tainted canvas.");
+          src = await loadVideoViaGitHubApi(folder, video);
+        } else {
+          const hasToken = !!(tokenEl.value || "").trim();
+          if (hasToken) {
+            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame.");
+            src = await loadVideoViaGitHubApi(folder, video);
+          } else {
+            setWarn("Không có token: dùng CDN. Nếu bạn export frame bị lỗi 'Tainted canvas', hãy nhập token để tải video qua GitHub API.");
+            src = mediaUrlCdn(folder, video);
+          }
+        }
+
+        v.src = src;
+      } catch (e) {
+        setWarn(String(e?.message || e));
+        // fallback CDN (chỉ để xem)
+        v.src = mediaUrlCdn(folder, video);
+      }
 
       v.addEventListener("loadedmetadata", async () => {
         durEl.textContent = (v.duration || 0).toFixed(3);
@@ -438,7 +503,6 @@ File: dev/video_editor.html
         endEl.value = (v.duration || 0).toFixed(1);
         speedEl.value = "1";
         speedVal.textContent = "1.0x";
-
         await seekTo(0);
       });
 
