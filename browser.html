@@ -95,7 +95,7 @@
    *  ========================= */
   const OWNER = "tramiune";
   const REPO  = "tramiune001_res_wallpaper";
-  const BRANCH = "main";
+  const BRANCH = "main";      // nếu repo bạn là master thì đổi lại
   const ROOT_DIR = "resources";
   const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
@@ -122,6 +122,11 @@
 
   function setStatus(s) { elStatus.textContent = s || ""; }
 
+  /** Encode từng segment, giữ nguyên dấu "/" */
+  function encodePath(path) {
+    return path.split("/").map(encodeURIComponent).join("/");
+  }
+
   function extOf(name) {
     const i = name.lastIndexOf(".");
     return i >= 0 ? name.slice(i+1).toLowerCase() : "";
@@ -134,9 +139,12 @@
     return name.includes("_preview.");
   }
 
-  function ghApi(path) {
-    return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
+  function ghApiContents(path) {
+    // IMPORTANT: không encode cả chuỗi bằng encodeURIComponent vì sẽ biến "/" thành "%2F"
+    const p = encodePath(path);
+    return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
   }
+
   async function fetchJson(url) {
     const res = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
     const limit = res.headers.get("x-ratelimit-limit");
@@ -255,9 +263,34 @@
     return t;
   }
 
-  async function deleteFileOnGitHub(filePath, sha) {
+  /** Lấy sha mới nhất của file trên branch để tránh mismatch */
+  async function getFileSha(filePath) {
     const token = getAuthToken();
-    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${filePath}`;
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
+
+    const res = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json"
+      }
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> "");
+      throw new Error(`Get SHA failed: HTTP ${res.status}\n${txt}`);
+    }
+    const j = await res.json();
+    if (!j?.sha) throw new Error("Get SHA failed: response thiếu sha");
+    return j.sha;
+  }
+
+  async function deleteFileOnGitHub(filePath) {
+    const token = getAuthToken();
+    const sha = await getFileSha(filePath);
+
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`;
+
+    console.log("DELETE PATH:", filePath, "BRANCH:", BRANCH, "SHA:", sha);
 
     const res = await fetch(url, {
       method: "DELETE",
@@ -288,10 +321,10 @@
     if (!ok) return;
 
     setStatus(`Deleting...\n${filePath}`);
-    await deleteFileOnGitHub(filePath, f.sha);
+    await deleteFileOnGitHub(filePath);
 
     setStatus(`✅ Deleted\n${filePath}`);
-    await openFolder(activeFolder); // reload folder
+    await openFolder(activeFolder);
   }
 
   async function loadFolders() {
@@ -301,7 +334,7 @@
     elItemCount.textContent = "";
     elGrid.innerHTML = "";
 
-    const data = await fetchJson(ghApi(ROOT_DIR));
+    const data = await fetchJson(ghApiContents(ROOT_DIR));
     allFolders = data
       .filter(x => x.type === "dir")
       .map(x => ({ name: x.name, path: x.path }))
@@ -321,9 +354,8 @@
     elGrid.innerHTML = "";
 
     const path = `${ROOT_DIR}/${folderName}`;
-    const data = await fetchJson(ghApi(path));
+    const data = await fetchJson(ghApiContents(path));
 
-    // lưu sha để delete
     activeFiles = data
       .filter(x => x.type === "file")
       .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
