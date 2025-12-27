@@ -212,10 +212,7 @@
     thumb.className = "thumb";
 
     const maybePreview = previewByBase.get(f.name);
-    const srcUrl =
-      (!isPreviewName(f.name) && maybePreview && !isVideo)
-        ? mediaUrl(activeFolder, maybePreview)
-        : mediaUrl(activeFolder, f.name);
+    const srcUrl = mediaUrl(activeFolder, f.name);
 
     if (isVideo) {
       const v = document.createElement("video");
