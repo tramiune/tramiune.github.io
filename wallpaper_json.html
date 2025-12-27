@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Wallpaper JSON Generator</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    textarea { width: 100%; min-height: 260px; padding: 10px; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button, a.btn {
+      border: 1px solid #ccc; background: #fff; padding: 8px 10px; border-radius: 8px;
+      cursor: pointer; text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px;
+    }
+    button:hover, a.btn:hover { background: #f5f5f5; }
+    .ok { color: #0a7a2f; }
+    .err { color: #b00020; white-space: pre-wrap; }
+    .small { font-size: 12px; color: #666; }
+    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Wallpaper JSON Generator → dev/wallpaper.json</h1>
+
+  <div class="row">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
+        <b>Input (paste mảng JSON của bạn)</b>
+        <span class="small">Hỗ trợ validate + pretty format</span>
+      </div>
+      <textarea id="input"></textarea>
+
+      <div class="btns" style="margin-top:10px;">
+        <button id="btnGenerate">Generate</button>
+        <button id="btnMinify">Minify</button>
+        <button id="btnCopy">Copy output</button>
+        <a id="btnDownload" class="btn" href="#" download="wallpaper.json" style="display:none;">Download wallpaper.json</a>
+        <span id="status" class="small"></span>
+      </div>
+      <div id="error" class="err" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <b>Output (JSON sẽ để vào dev/wallpaper.json)</b>
+      <textarea id="output" readonly></textarea>
+      <div class="small" style="margin-top:8px;">
+        Tip: Sau khi download, bạn copy file đó vào repo: <code>dev/wallpaper.json</code> rồi commit/push.
+      </div>
+    </div>
+  </div>
+
+<script>
+  const inputEl = document.getElementById('input');
+  const outputEl = document.getElementById('output');
+  const statusEl = document.getElementById('status');
+  const errEl = document.getElementById('error');
+  const dlEl = document.getElementById('btnDownload');
+
+  // Prefill bằng dữ liệu bạn gửi (để khỏi paste lại)
+  inputEl.value = `[
+  {
+    "baseCreatedAt": 1760677055,
+    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/101_anime/",
+    "categoryId": "101_anime",
+    "fileNamePrefix": "anime_",
+    "liveItemNumbers": [
+      1,2,3,
+      9,10,11,12,13,14,15,16,17,18,19,20,21,22,
+      46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
+      61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,
+      76,77,78,79,80,81,82,83,84,85,86
+    ],
+    "previewItemNumbers": [1,2,3,52,80,60,46,19,10],
+    "doubleItems": [],
+    "daysItems": [],
+    "coupleItemsPreview": [],
+    "coupleItemsNoPreview": [],
+    "orderItems": [
+      3,1,2,5,16,52,84,83,80,73,60,59,57,54,46,19,18,14,10,12,11,
+      41,78,26,71,33,65,6,82,75,68,24,49,32,86,70,29,9,77,45,35,
+      4,63,22,72,27,31,8,47,58,7,38,25,79,43,17,44,15,40,20,
+      34,55,51,69,62,50,23,28,76,39,30,42,48,61,66,67,64,74,
+      85,53,56,81
+    ]
+  },
+  {
+    "baseCreatedAt": 1760677055,
+    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/102_silly_smile/",
+    "categoryId": "102_silly_smile",
+    "fileNamePrefix": "silly_",
+    "liveItemNumbers": [
+      1,2,3,4,5,6,7,8,9,10,11,12,
+      13,14,15,16,17,18,19,20,21,22,23,24,
+      31
+    ],
+    "previewItemNumbers": [1,3,9,8,31],
+    "doubleItems": [],
+    "daysItems": [],
+    "coupleItemsPreview": [],
+    "coupleItemsNoPreview": [],
+    "orderItems": [
+      1,3,9,8,15,18,31,
+      14,22,6,21,11,2,24,5,17,19,4,12,20,7,16,10,13,23
+    ]
+  }
+]`;
+
+  function setDownload(jsonText) {
+    const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    dlEl.href = url;
+    dlEl.style.display = 'inline-flex';
+  }
+
+  function clearUI() {
+    errEl.textContent = '';
+    statusEl.textContent = '';
+    statusEl.className = 'small';
+  }
+
+  function validateShape(data) {
+    if (!Array.isArray(data)) throw new Error("Root phải là ARRAY: [ { ... }, { ... } ]");
+
+    // Check nhanh các field chính (không bắt buộc full)
+    for (let i = 0; i < data.length; i++) {
+      const x = data[i];
+      const required = ["baseCreatedAt","baseUrl","categoryId","fileNamePrefix","liveItemNumbers","previewItemNumbers","orderItems"];
+      for (const k of required) {
+        if (!(k in x)) throw new Error(`Item #${i} thiếu field: ${k}`);
+      }
+      if (!Array.isArray(x.liveItemNumbers) || !Array.isArray(x.previewItemNumbers) || !Array.isArray(x.orderItems)) {
+        throw new Error(`Item #${i} liveItemNumbers/previewItemNumbers/orderItems phải là array`);
+      }
+    }
+  }
+
+  function generate(pretty=true) {
+    clearUI();
+    try {
+      const raw = inputEl.value.trim();
+      const data = JSON.parse(raw);
+      validateShape(data);
+
+      const out = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+      outputEl.value = out;
+
+      setDownload(out);
+      statusEl.textContent = `OK ✅ Generated (${out.length.toLocaleString()} chars)`;
+      statusEl.className = 'small ok';
+    } catch (e) {
+      outputEl.value = '';
+      dlEl.style.display = 'none';
+      errEl.textContent = String(e && e.message ? e.message : e);
+      statusEl.textContent = 'Lỗi ❌';
+      statusEl.className = 'small err';
+    }
+  }
+
+  document.getElementById('btnGenerate').addEventListener('click', () => generate(true));
+  document.getElementById('btnMinify').addEventListener('click', () => generate(false));
+  document.getElementById('btnCopy').addEventListener('click', async () => {
+    const text = outputEl.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      statusEl.textContent = 'Copied ✅';
+      statusEl.className = 'small ok';
+    } catch {
+      statusEl.textContent = 'Copy failed ❌ (trình duyệt chặn clipboard)';
+      statusEl.className = 'small err';
+    }
+  });
+
+  // Auto-generate lần đầu
+  generate(true);
+</script>
+</body>
+</html>
