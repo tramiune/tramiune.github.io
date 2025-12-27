@@ -1,3 +1,6 @@
+<!-- =========================
+File: dev/video_editor.html
+========================= -->
 <!doctype html>
 <html lang="vi">
 <head>
@@ -10,6 +13,7 @@
         header{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
         header b{font-size:14px}
         .mut{color:var(--mut);font-size:12px}
+        .k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px}
         main{padding:14px;display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
         .card{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:#fff}
         .hd{padding:10px 12px;border-bottom:1px solid var(--bd);font-weight:600;font-size:13px}
@@ -18,7 +22,9 @@
         canvas{width:100%;max-height:40vh;border-radius:12px;background:#111;display:block}
         label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:10px 0;font-size:13px}
         input[type="range"]{width:60%}
-        input[type="number"]{width:120px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px}
+        input[type="number"], input[type="password"]{
+          width:140px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px
+        }
         button,a.btn{
           border:1px solid var(--bd);background:#fff;padding:8px 10px;border-radius:10px;cursor:pointer;
           text-decoration:none;color:inherit;display:inline-flex;gap:6px;align-items:center
@@ -26,13 +32,20 @@
         button:hover,a.btn:hover{background:#f5f5f5}
         .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
         .status{white-space:pre-wrap;font-size:12px;color:var(--mut);margin-top:10px}
-        .k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px}
+        hr{border:none;border-top:1px solid var(--bd);margin:14px 0}
     </style>
 </head>
 <body>
 <header>
     <b>Video Editor</b>
     <span class="mut" id="info"></span>
+
+    <input id="token" type="password" placeholder="GitHub Token (Contents: write)" style="min-width:260px" />
+    <label class="mut" title="Lưu token trên máy bạn (localStorage)">
+        <input id="remember" type="checkbox" />
+        remember token
+    </label>
+
     <a class="btn" id="back" href="./browser.html">← Back</a>
 </header>
 
@@ -60,17 +73,22 @@
     </div>
 
     <div class="card">
-        <div class="hd">Export frame (webp) + Trim video</div>
+        <div class="hd">Frame → webp (replace) + Trim video (lite)</div>
         <div class="ct">
             <div class="mut">Frame preview (canvas):</div>
             <canvas id="c"></canvas>
 
             <div class="row" style="margin-top:10px">
-                <button id="capture">📸 Capture frame → .webp</button>
-                <button id="capturePreview" title="Xuất thêm file _preview.webp nhỏ hơn">🖼️ +preview.webp</button>
+                <button id="downloadWebp">📸 Download .webp</button>
+                <button id="downloadPreview">🖼️ Download _preview.webp</button>
+                <button id="replaceWebp">✅ Replace target on GitHub</button>
             </div>
 
-            <hr style="border:none;border-top:1px solid var(--bd);margin:14px 0"/>
+            <div class="mut" style="margin-top:8px">
+                Target: <span class="k" id="targetLabel">(none)</span>
+            </div>
+
+            <hr/>
 
             <div class="mut">Trim video (lite, export .webm):</div>
             <label>
@@ -98,9 +116,10 @@
 </main>
 
 <script>
-    /** Repo config (giống browser) */
+    /** Repo config */
     const OWNER = "tramiune";
     const REPO  = "tramiune001_res_wallpaper";
+    const BRANCH = "main";          // nếu repo bạn là master thì đổi lại
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
@@ -114,18 +133,28 @@
     const durEl = document.getElementById("dur");
     const scrub = document.getElementById("scrub");
     const scrubVal = document.getElementById("scrubVal");
+    const targetLabel = document.getElementById("targetLabel");
 
     const startEl = document.getElementById("start");
     const endEl = document.getElementById("end");
     const speedEl = document.getElementById("speed");
     const speedVal = document.getElementById("speedVal");
 
+    const tokenEl = document.getElementById("token");
+    const rememberEl = document.getElementById("remember");
+
     function setStatus(s){ statusEl.textContent = s || ""; }
 
     function qs() {
       const p = new URLSearchParams(location.search);
-      return { folder: p.get("folder") || "", file: p.get("file") || "" };
+      return {
+        mode: p.get("mode") || "edit",        // edit | replaceImage
+        folder: p.get("folder") || "",
+        video: p.get("video") || "",
+        target: p.get("target") || ""         // anime_001.webp
+      };
     }
+
     function mediaUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
     function baseName(file){
       const i = file.lastIndexOf(".");
@@ -142,7 +171,6 @@
 
     function drawFrameToCanvas(){
       if (!v.videoWidth || !v.videoHeight) return;
-      // giữ đúng kích thước gốc
       c.width = v.videoWidth;
       c.height = v.videoHeight;
       ctx.drawImage(v, 0, 0, c.width, c.height);
@@ -153,7 +181,6 @@
       v.pause();
       v.currentTime = t;
 
-      // đảm bảo frame update xong
       await new Promise(resolve => {
         const onSeeked = () => { v.removeEventListener("seeked", onSeeked); resolve(); };
         v.addEventListener("seeked", onSeeked, { once: true });
@@ -170,37 +197,123 @@
       scrub.value = String(ct);
     }
 
+    /** ---------- token share with browser ---------- */
+    const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
+    (function initRememberToken(){
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        tokenEl.value = saved;
+        rememberEl.checked = true;
+      }
+      rememberEl.addEventListener("change", () => {
+        if (rememberEl.checked) {
+          if (tokenEl.value.trim()) localStorage.setItem(LS_KEY, tokenEl.value.trim());
+        } else {
+          localStorage.removeItem(LS_KEY);
+        }
+      });
+      tokenEl.addEventListener("input", () => {
+        if (rememberEl.checked) localStorage.setItem(LS_KEY, tokenEl.value.trim());
+      });
+    })();
+
+    function getAuthToken() {
+      const t = (tokenEl?.value || "").trim();
+      if (!t) throw new Error("Bạn chưa nhập GitHub token (Contents: write).");
+      return t;
+    }
+    function encodePath(path) {
+      return path.split("/").map(encodeURIComponent).join("/");
+    }
+    async function ghGetJson(url, token) {
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status}\n${txt}`);
+      }
+      return res.json();
+    }
+    async function ghPutJson(url, token, body) {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status}\n${txt}`);
+      }
+      return res.json();
+    }
+    async function getFileSha(filePath, token) {
+      const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
+      const j = await ghGetJson(url, token);
+      if (!j?.sha) throw new Error("Không lấy được sha của file.");
+      return j.sha;
+    }
+    async function blobToBase64NoPrefix(blob) {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      return String(dataUrl).split(",")[1];
+    }
+    async function replaceWebpOnGitHub(folder, targetFileName, webpBlob) {
+      const token = getAuthToken();
+      const filePath = `${ROOT_DIR}/${folder}/${targetFileName}`;
+
+      setStatus(`Uploading...\n→ ${filePath}`);
+
+      const sha = await getFileSha(filePath, token);
+      const content = await blobToBase64NoPrefix(webpBlob);
+
+      await ghPutJson(
+        `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`,
+        token,
+        {
+          message: `Update ${filePath}`,
+          content,
+          sha,           // replace (ghi đè)
+          branch: BRANCH
+        }
+      );
+
+      setStatus(`✅ Replaced on GitHub\n${filePath}`);
+    }
+
+    /** ---------- UI actions ---------- */
     speedEl.addEventListener("input", ()=> speedVal.textContent = `${Number(speedEl.value).toFixed(1)}x`);
     document.getElementById("apply").onclick = ()=> { v.playbackRate = Number(speedEl.value) || 1; };
 
     document.getElementById("seekPrev").onclick = ()=> seekTo((v.currentTime||0) - 0.1);
     document.getElementById("seekNext").onclick = ()=> seekTo((v.currentTime||0) + 0.1);
 
-    scrub.addEventListener("input", ()=> {
-      // input event spam, chỉ update text
-      scrubVal.textContent = Number(scrub.value).toFixed(3);
-    });
+    scrub.addEventListener("input", ()=> { scrubVal.textContent = Number(scrub.value).toFixed(3); });
     scrub.addEventListener("change", ()=> seekTo(Number(scrub.value) || 0));
 
-    document.getElementById("capture").onclick = async () => {
-      const { file } = qs();
-      const out = `${baseName(file)}.webp`;
-
+    document.getElementById("downloadWebp").onclick = async () => {
+      const { video } = qs();
+      const out = `${baseName(video)}.webp`;
       drawFrameToCanvas();
       setStatus(`Capturing frame...\n→ ${out}`);
-
       const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", 0.92));
       if (!blob) throw new Error("toBlob failed (webp not supported?)");
-
       downloadBlob(blob, out);
       setStatus(`✅ Saved\n${out}`);
     };
 
-    document.getElementById("capturePreview").onclick = async () => {
-      const { file } = qs();
-      const out = `${baseName(file)}_preview.webp`;
+    document.getElementById("downloadPreview").onclick = async () => {
+      const { video } = qs();
+      const out = `${baseName(video)}_preview.webp`;
 
-      // scale nhỏ để làm preview (ví dụ chiều rộng 360)
       drawFrameToCanvas();
       const targetW = 360;
       const scale = targetW / c.width;
@@ -212,17 +325,33 @@
       tmp.getContext("2d").drawImage(c, 0, 0, w, h);
 
       setStatus(`Capturing preview...\n→ ${out}`);
-
       const blob = await new Promise(resolve => tmp.toBlob(resolve, "image/webp", 0.85));
       if (!blob) throw new Error("toBlob failed (webp not supported?)");
-
       downloadBlob(blob, out);
       setStatus(`✅ Saved\n${out}`);
     };
 
-    /** Trim (lite) — export .webm bằng cách record lại từ canvas (không audio) */
+    document.getElementById("replaceWebp").onclick = async () => {
+      try {
+        const { mode, folder, target, video } = qs();
+        if (mode !== "replaceImage") {
+          throw new Error("Nút Replace chỉ dùng khi mở từ Update (mode=replaceImage).");
+        }
+        if (!folder || !target || !video) throw new Error("Thiếu folder/video/target.");
+
+        drawFrameToCanvas();
+        const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", 0.92));
+        if (!blob) throw new Error("toBlob failed (webp not supported?)");
+
+        await replaceWebpOnGitHub(folder, target, blob);
+      } catch (e) {
+        alert(String(e?.message || e));
+      }
+    };
+
+    /** ---------- Trim (lite) export .webm (no-audio) ---------- */
     async function exportTrimWebm(){
-      const { file } = qs();
+      const { video } = qs();
 
       const start = Math.max(0, Number(startEl.value) || 0);
       const endIn = Math.max(0, Number(endEl.value) || 0);
@@ -232,11 +361,10 @@
       const end = (endIn <= 0 || endIn > v.duration) ? v.duration : endIn;
       if (end <= start) throw new Error("Trim end phải > trim start.");
 
-      const out = `${baseName(file)}_trim_${start.toFixed(1)}_${end.toFixed(1)}.webm`;
+      const out = `${baseName(video)}_trim_${start.toFixed(1)}_${end.toFixed(1)}.webm`;
 
       setStatus(`Exporting trim (lite)...\nstart=${start}s end=${end}s speed=${rate}x\n→ ${out}\n\nNote: output webm, no-audio (lite mode)`);
 
-      // setup canvas stream
       drawFrameToCanvas();
       const stream = c.captureStream(30);
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
@@ -289,33 +417,33 @@
       catch(e){ alert(String(e?.message || e)); }
     };
 
+    /** ---------- init ---------- */
     (async function init(){
-      const { folder, file } = qs();
-      if (!folder || !file) {
-        info.textContent = "Thiếu query ?folder=...&file=...";
-        setStatus("Mở từ browser.html bằng nút Edit (video) để tự fill query.");
+      const { mode, folder, video, target } = qs();
+      if (!folder || !video) {
+        info.textContent = "Thiếu query ?folder=...&video=...";
+        setStatus("Mở từ browser.html bằng nút Edit / Update để tự fill query.");
         return;
       }
 
-      info.textContent = `${folder}/${file}`;
-      v.src = mediaUrl(folder, file);
+      info.textContent = `${folder}/${video} · mode=${mode}`;
+      targetLabel.textContent = target ? target : "(none)";
+
+      v.src = mediaUrl(folder, video);
 
       v.addEventListener("loadedmetadata", async () => {
         durEl.textContent = (v.duration || 0).toFixed(3);
         scrub.max = String(v.duration || 0);
         startEl.value = "0";
         endEl.value = (v.duration || 0).toFixed(1);
+        speedEl.value = "1";
+        speedVal.textContent = "1.0x";
 
         await seekTo(0);
       });
 
-      // update time khi play
       v.addEventListener("timeupdate", () => {
-        if (!v.paused) {
-          updateUI();
-          // chỉ redraw nếu muốn preview “live”
-          // drawFrameToCanvas();
-        }
+        if (!v.paused) updateUI();
       });
     })();
 </script>

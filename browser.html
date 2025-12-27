@@ -1,3 +1,6 @@
+<!-- =========================
+File: dev/browser.html
+========================= -->
 <!doctype html>
 <html lang="vi">
 <head>
@@ -42,6 +45,12 @@
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     a { color: inherit; }
     .danger { border-color:#f0c1c1 !important; }
+
+    a.btn{
+      border:1px solid var(--bd); background:#fff; padding:8px 10px; border-radius:10px;
+      cursor:pointer; text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
+    }
+    a.btn:hover{ background:#f5f5f5; }
   </style>
 </head>
 <body>
@@ -95,7 +104,7 @@
    *  ========================= */
   const OWNER = "tramiune";
   const REPO  = "tramiune001_res_wallpaper";
-  const BRANCH = "main";      // nếu repo bạn là master thì đổi lại
+  const BRANCH = "main";          // nếu repo bạn là master thì đổi lại
   const ROOT_DIR = "resources";
   const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
@@ -122,10 +131,8 @@
 
   function setStatus(s) { elStatus.textContent = s || ""; }
 
-  /** Encode từng segment, giữ nguyên dấu "/" */
-  function encodePath(path) {
-    return path.split("/").map(encodeURIComponent).join("/");
-  }
+  /** encode từng segment, giữ "/" */
+  function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
 
   function extOf(name) {
     const i = name.lastIndexOf(".");
@@ -140,7 +147,6 @@
   }
 
   function ghApiContents(path) {
-    // IMPORTANT: không encode cả chuỗi bằng encodeURIComponent vì sẽ biến "/" thành "%2F"
     const p = encodePath(path);
     return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
   }
@@ -155,6 +161,10 @@
       throw new Error(`HTTP ${res.status} when GET ${url}\n${txt}`);
     }
     return res.json();
+  }
+
+  function mediaUrl(folderName, fileName) {
+    return `${CDN_BASE}${folderName}/${fileName}`;
   }
 
   function renderFolders(list) {
@@ -172,140 +182,39 @@
     }
   }
 
-  function mediaUrl(folderName, fileName) {
-    return `${CDN_BASE}${folderName}/${fileName}`;
-  }
-
-  function renderGrid(files) {
-  elGrid.innerHTML = "";
-  const q = elQ.value.trim().toLowerCase();
-  const showPreview = elShowPreview.checked;
-
-  // map: baseFile -> previewFile
-  const previewByBase = new Map();
-  for (const f of files) {
-    if (!isMediaFile(f.name)) continue;
-    if (!isPreviewName(f.name)) continue;
-    const base = f.name.replace("_preview.", ".");
-    previewByBase.set(base, f.name);
-  }
-
-  let shown = files
-    .filter(f => isMediaFile(f.name))
-    .filter(f => f.name.toLowerCase().includes(q));
-
-  if (!showPreview) {
-    shown = shown.filter(f => !isPreviewName(f.name));
-  }
-
-  elItemCount.textContent = `Items: ${shown.length}`;
-
-  for (const f of shown) {
-    const e = extOf(f.name);
-    const isVideo = VIDEO_EXT.includes(e);
-
-    const card = document.createElement("div");
-    card.className = "card";
-
-    /* ---------- THUMB ---------- */
-    const thumb = document.createElement("div");
-    thumb.className = "thumb";
-
-    const maybePreview = previewByBase.get(f.name);
-    const srcUrl = mediaUrl(activeFolder, f.name);
-
-    if (isVideo) {
-      const v = document.createElement("video");
-      v.src = srcUrl;
-      v.controls = true;
-      v.muted = true;
-      v.playsInline = true;
-      v.preload = "metadata";
-      thumb.appendChild(v);
-    } else {
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.src = srcUrl;
-      img.alt = f.name;
-      thumb.appendChild(img);
-    }
-
-    /* ---------- META ---------- */
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML = `
-      <div class="name" title="${f.name}">${f.name}</div>
-      <div class="pill">
-        ${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}
-      </div>
-      <div class="small" style="margin-top:6px;">
-        <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">
-          open file
-        </a>
-      </div>
-    `;
-
-    /* ---------- ACTIONS ---------- */
-    const actions = document.createElement("div");
-    actions.style.display = "flex";
-    actions.style.gap = "8px";
-    actions.style.flexWrap = "wrap";
-    actions.style.marginTop = "8px";
-
-    // 🗑 Delete
-    const delBtn = document.createElement("button");
-    delBtn.textContent = "🗑 Delete";
-    delBtn.className = "danger";
-    delBtn.onclick = async () => {
-      try {
-        await deleteFileFlow(f);
-      } catch (err) {
-        alert(String(err?.message || err));
-      }
-    };
-    actions.appendChild(delBtn);
-
-    // ✂️ Edit (CHỈ CHO VIDEO)
-    if (isVideo) {
-      const editBtn = document.createElement("a");
-      editBtn.textContent = "✂️ Edit";
-      editBtn.className = "btn";
-      editBtn.href =
-        `./video_editor.html` +
-        `?folder=${encodeURIComponent(activeFolder)}` +
-        `&file=${encodeURIComponent(f.name)}`;
-      editBtn.target = "_blank"; // mở tab mới cho tiện
-      actions.appendChild(editBtn);
-    }
-
-    meta.appendChild(actions);
-
-    /* ---------- BUILD ---------- */
-    card.appendChild(thumb);
-    card.appendChild(meta);
-    elGrid.appendChild(card);
-  }
-}
-
-
+  /** ---------- AUTH ---------- */
   function getAuthToken() {
     const t = elToken.value.trim();
     if (!t) throw new Error("Bạn chưa nhập GitHub token (cần Contents: write).");
     return t;
   }
+  const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
+  (function initRememberToken(){
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      elToken.value = saved;
+      elRemember.checked = true;
+    }
+    elRemember.addEventListener("change", () => {
+      if (elRemember.checked) {
+        if (elToken.value.trim()) localStorage.setItem(LS_KEY, elToken.value.trim());
+      } else {
+        localStorage.removeItem(LS_KEY);
+      }
+    });
+    elToken.addEventListener("input", () => {
+      if (elRemember.checked) localStorage.setItem(LS_KEY, elToken.value.trim());
+    });
+  })();
 
-  /** Lấy sha mới nhất của file trên branch để tránh mismatch */
+  /** ---------- DELETE (safe) ---------- */
   async function getFileSha(filePath) {
     const token = getAuthToken();
     const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
 
     const res = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json"
-      }
+      headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
     });
-
     if (!res.ok) {
       const txt = await res.text().catch(()=> "");
       throw new Error(`Get SHA failed: HTTP ${res.status}\n${txt}`);
@@ -318,7 +227,6 @@
   async function deleteFileOnGitHub(filePath) {
     const token = getAuthToken();
     const sha = await getFileSha(filePath);
-
     const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`;
 
     console.log("DELETE PATH:", filePath, "BRANCH:", BRANCH, "SHA:", sha);
@@ -330,11 +238,7 @@
         "Accept": "application/vnd.github+json",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        message: `Delete ${filePath}`,
-        sha,
-        branch: BRANCH
-      })
+      body: JSON.stringify({ message: `Delete ${filePath}`, sha, branch: BRANCH })
     });
 
     if (!res.ok) {
@@ -345,7 +249,6 @@
 
   async function deleteFileFlow(f) {
     if (!activeFolder) return;
-
     const filePath = `${ROOT_DIR}/${activeFolder}/${f.name}`;
 
     const ok = confirm(`Xoá file khỏi GitHub?\n\n${filePath}\n\n⚠️ Không undo được (trừ khi bạn git revert).`);
@@ -358,6 +261,140 @@
     await openFolder(activeFolder);
   }
 
+  /** ---------- GRID ---------- */
+  function renderGrid(files) {
+    elGrid.innerHTML = "";
+    const q = elQ.value.trim().toLowerCase();
+    const showPreview = elShowPreview.checked;
+
+    // base -> preview filename
+    const previewByBase = new Map();
+    for (const f of files) {
+      if (!isMediaFile(f.name)) continue;
+      if (!isPreviewName(f.name)) continue;
+      const base = f.name.replace("_preview.", ".");
+      previewByBase.set(base, f.name);
+    }
+
+    // basename -> mp4 filename
+    const mp4ByBase = new Map();
+    for (const f of files) {
+      const e = extOf(f.name);
+      if (VIDEO_EXT.includes(e)) {
+        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        mp4ByBase.set(base, f.name);
+      }
+    }
+
+    let shown = files
+      .filter(f => isMediaFile(f.name))
+      .filter(f => f.name.toLowerCase().includes(q));
+
+    if (!showPreview) shown = shown.filter(f => !isPreviewName(f.name));
+
+    elItemCount.textContent = `Items: ${shown.length}`;
+
+    for (const f of shown) {
+      const e = extOf(f.name);
+      const isVideo = VIDEO_EXT.includes(e);
+      const isImage = IMAGE_EXT.includes(e);
+
+      const card = document.createElement("div");
+      card.className = "card";
+
+      // THUMB
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+
+      // ✅ luôn hiển thị đúng file gốc (không tự thay preview)
+      const srcUrl = mediaUrl(activeFolder, f.name);
+
+      if (isVideo) {
+        const v = document.createElement("video");
+        v.src = srcUrl;
+        v.controls = true;
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = "metadata";
+        thumb.appendChild(v);
+      } else {
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = srcUrl;
+        img.alt = f.name;
+        thumb.appendChild(img);
+      }
+
+      // META
+      const meta = document.createElement("div");
+      meta.className = "meta";
+
+      const maybePreview = previewByBase.get(f.name);
+      const labelPreviewHint =
+        (!isVideo && !isPreviewName(f.name) && maybePreview) ? " · has preview" : "";
+
+      meta.innerHTML = `
+        <div class="name" title="${f.name}">${f.name}</div>
+        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}${labelPreviewHint}</div>
+        <div class="small" style="margin-top:6px;">
+          <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">open file</a>
+        </div>
+      `;
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.gap = "8px";
+      actions.style.flexWrap = "wrap";
+      actions.style.marginTop = "8px";
+
+      // Delete
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑 Delete";
+      delBtn.className = "danger";
+      delBtn.onclick = async () => {
+        try { await deleteFileFlow(f); }
+        catch (err) { alert(String(err?.message || err)); }
+      };
+      actions.appendChild(delBtn);
+
+      // Edit (video)
+      if (isVideo) {
+        const editBtn = document.createElement("a");
+        editBtn.textContent = "✂️ Edit";
+        editBtn.className = "btn";
+        editBtn.href = `./video_editor.html?mode=edit&folder=${encodeURIComponent(activeFolder)}&video=${encodeURIComponent(f.name)}`;
+        editBtn.target = "_blank";
+        actions.appendChild(editBtn);
+      }
+
+      // Update (webp thường, không preview) -> mở editor replace
+      const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
+      if (isNormalWebp) {
+        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        const mp4 = mp4ByBase.get(base);
+        if (mp4) {
+          const updBtn = document.createElement("a");
+          updBtn.textContent = "🔄 Update";
+          updBtn.className = "btn";
+          updBtn.href =
+            `./video_editor.html?mode=replaceImage` +
+            `&folder=${encodeURIComponent(activeFolder)}` +
+            `&video=${encodeURIComponent(mp4)}` +
+            `&target=${encodeURIComponent(f.name)}`;
+          updBtn.target = "_blank";
+          actions.appendChild(updBtn);
+        }
+      }
+
+      meta.appendChild(actions);
+
+      card.appendChild(thumb);
+      card.appendChild(meta);
+      elGrid.appendChild(card);
+    }
+  }
+
+  /** ---------- LOADERS ---------- */
   async function loadFolders() {
     setStatus("Loading folders...");
     elTitle.textContent = "Chọn folder";
@@ -395,26 +432,6 @@
     setStatus("");
     renderGrid(activeFiles);
   }
-
-  /** remember token (localStorage) */
-  const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
-  (function initRememberToken(){
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved) {
-      elToken.value = saved;
-      elRemember.checked = true;
-    }
-    elRemember.addEventListener("change", () => {
-      if (elRemember.checked) {
-        if (elToken.value.trim()) localStorage.setItem(LS_KEY, elToken.value.trim());
-      } else {
-        localStorage.removeItem(LS_KEY);
-      }
-    });
-    elToken.addEventListener("input", () => {
-      if (elRemember.checked) localStorage.setItem(LS_KEY, elToken.value.trim());
-    });
-  })();
 
   document.getElementById("reload").onclick = () => loadFolders();
   elQ.addEventListener("input", () => {
