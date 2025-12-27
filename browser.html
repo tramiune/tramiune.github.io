@@ -174,7 +174,6 @@ function renderGrid(files) {
   const shown = files
     .filter(f => isMediaFile(f.name))
     .filter(f => f.name.toLowerCase().includes(q))
-    .filter(f => !isPreviewName(f.name)); // không show riêng preview
 
   elItemCount.textContent = `Items: ${shown.length}`;
 
