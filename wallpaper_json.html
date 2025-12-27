@@ -3,36 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Wallpaper JSON Generator</title>
+  <title>Wallpaper Items JSON Generator</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 16px; }
     h1 { font-size: 18px; margin: 0 0 12px; }
-    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    textarea { width: 100%; min-height: 260px; padding: 10px; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; }
-    .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    textarea { width: 100%; min-height: 240px; padding: 10px; box-sizing: border-box;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
     button, a.btn {
       border: 1px solid #ccc; background: #fff; padding: 8px 10px; border-radius: 8px;
       cursor: pointer; text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px;
     }
     button:hover, a.btn:hover { background: #f5f5f5; }
+    .small { font-size: 12px; color: #666; }
     .ok { color: #0a7a2f; }
     .err { color: #b00020; white-space: pre-wrap; }
-    .small { font-size: 12px; color: #666; }
-    .card { border: 1px solid #e5e5e5; border-radius: 12px; padding: 12px; }
+    label { display:inline-flex; gap:8px; align-items:center; font-size: 13px; }
+    input[type="checkbox"] { transform: translateY(1px); }
+    code { background:#f6f6f6; padding:2px 6px; border-radius:6px; }
   </style>
 </head>
 <body>
-  <h1>Wallpaper JSON Generator → dev/wallpaper.json</h1>
+  <h1>Generate items JSON (id + medias + type) → dev/wallpaper.json</h1>
 
-  <div class="row">
+  <div class="grid">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;">
-        <b>Input (paste mảng JSON của bạn)</b>
-        <span class="small">Hỗ trợ validate + pretty format</span>
+      <b>Input: Category config (mảng như tin nhắn trước: baseUrl, orderItems...)</b>
+      <div class="small" style="margin-top:6px;">
+        Generator sẽ duyệt theo <code>orderItems</code> (nếu rỗng sẽ fallback <code>liveItemNumbers</code>).
       </div>
       <textarea id="input"></textarea>
 
-      <div class="btns" style="margin-top:10px;">
+      <div class="btns">
+        <label title="Bật sẽ HEAD check mp4 tồn tại để quyết định type=0/1">
+          <input id="chkHead" type="checkbox" checked />
+          Smart detect mp4 (HEAD check)
+        </label>
+
+        <label title="Nếu true: createdAt sẽ tăng +1 theo từng item (giống sample bạn gửi)">
+          <input id="chkCreatedAtInc" type="checkbox" checked />
+          createdAt = baseCreatedAt + index
+        </label>
+
+        <label title="Mặc định isPremium=true như sample bạn gửi">
+          <input id="chkPremium" type="checkbox" checked />
+          isPremium = true
+        </label>
+      </div>
+
+      <div class="btns">
         <button id="btnGenerate">Generate</button>
         <button id="btnMinify">Minify</button>
         <button id="btnCopy">Copy output</button>
@@ -43,10 +64,11 @@
     </div>
 
     <div class="card">
-      <b>Output (JSON sẽ để vào dev/wallpaper.json)</b>
+      <b>Output: Items JSON (mảng item đúng format bạn muốn)</b>
       <textarea id="output" readonly></textarea>
       <div class="small" style="margin-top:8px;">
-        Tip: Sau khi download, bạn copy file đó vào repo: <code>dev/wallpaper.json</code> rồi commit/push.
+        Commit output này vào <code>dev/wallpaper.json</code> để có API:
+        <code>https://tramiune.github.io/tramiune001_res_wallpaper/dev/wallpaper.json</code>
       </div>
     </div>
   </div>
@@ -58,54 +80,18 @@
   const errEl = document.getElementById('error');
   const dlEl = document.getElementById('btnDownload');
 
-  // Prefill bằng dữ liệu bạn gửi (để khỏi paste lại)
-  inputEl.value = `[
-  {
-    "baseCreatedAt": 1760677055,
-    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/101_anime/",
-    "categoryId": "101_anime",
-    "fileNamePrefix": "anime_",
-    "liveItemNumbers": [
-      1,2,3,
-      9,10,11,12,13,14,15,16,17,18,19,20,21,22,
-      46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,
-      61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,
-      76,77,78,79,80,81,82,83,84,85,86
-    ],
-    "previewItemNumbers": [1,2,3,52,80,60,46,19,10],
-    "doubleItems": [],
-    "daysItems": [],
-    "coupleItemsPreview": [],
-    "coupleItemsNoPreview": [],
-    "orderItems": [
-      3,1,2,5,16,52,84,83,80,73,60,59,57,54,46,19,18,14,10,12,11,
-      41,78,26,71,33,65,6,82,75,68,24,49,32,86,70,29,9,77,45,35,
-      4,63,22,72,27,31,8,47,58,7,38,25,79,43,17,44,15,40,20,
-      34,55,51,69,62,50,23,28,76,39,30,42,48,61,66,67,64,74,
-      85,53,56,81
-    ]
-  },
-  {
-    "baseCreatedAt": 1760677055,
-    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/102_silly_smile/",
-    "categoryId": "102_silly_smile",
-    "fileNamePrefix": "silly_",
-    "liveItemNumbers": [
-      1,2,3,4,5,6,7,8,9,10,11,12,
-      13,14,15,16,17,18,19,20,21,22,23,24,
-      31
-    ],
-    "previewItemNumbers": [1,3,9,8,31],
-    "doubleItems": [],
-    "daysItems": [],
-    "coupleItemsPreview": [],
-    "coupleItemsNoPreview": [],
-    "orderItems": [
-      1,3,9,8,15,18,31,
-      14,22,6,21,11,2,24,5,17,19,4,12,20,7,16,10,13,23
-    ]
+  const chkHead = document.getElementById('chkHead');
+  const chkCreatedAtInc = document.getElementById('chkCreatedAtInc');
+  const chkPremium = document.getElementById('chkPremium');
+
+  function pad3(n) {
+    const s = String(n);
+    return s.length >= 3 ? s : ("000" + s).slice(-3);
   }
-]`;
+
+  function normalizeBaseUrl(url) {
+    return url.endsWith("/") ? url : (url + "/");
+  }
 
   function setDownload(jsonText) {
     const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
@@ -120,38 +106,149 @@
     statusEl.className = 'small';
   }
 
-  function validateShape(data) {
-    if (!Array.isArray(data)) throw new Error("Root phải là ARRAY: [ { ... }, { ... } ]");
+  function validateCategoryConfig(list) {
+    if (!Array.isArray(list)) throw new Error("Root phải là ARRAY category config.");
 
-    // Check nhanh các field chính (không bắt buộc full)
-    for (let i = 0; i < data.length; i++) {
-      const x = data[i];
-      const required = ["baseCreatedAt","baseUrl","categoryId","fileNamePrefix","liveItemNumbers","previewItemNumbers","orderItems"];
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const required = ["baseCreatedAt","baseUrl","categoryId","fileNamePrefix"];
       for (const k of required) {
-        if (!(k in x)) throw new Error(`Item #${i} thiếu field: ${k}`);
+        if (!(k in c)) throw new Error(`Category #${i} thiếu field: ${k}`);
       }
-      if (!Array.isArray(x.liveItemNumbers) || !Array.isArray(x.previewItemNumbers) || !Array.isArray(x.orderItems)) {
-        throw new Error(`Item #${i} liveItemNumbers/previewItemNumbers/orderItems phải là array`);
+      if (!Array.isArray(c.orderItems) && !Array.isArray(c.liveItemNumbers)) {
+        throw new Error(`Category #${i}: cần có orderItems hoặc liveItemNumbers`);
+      }
+      c.baseUrl = normalizeBaseUrl(c.baseUrl);
+      c.previewItemNumbers = Array.isArray(c.previewItemNumbers) ? c.previewItemNumbers : [];
+    }
+  }
+
+  async function headExists(url) {
+    try {
+      // jsdelivr thường cho HEAD ok, nếu bị chặn CORS có thể fallback GET range
+      const res = await fetch(url, { method: "HEAD", cache: "no-store" });
+      return res.ok;
+    } catch {
+      try {
+        const res2 = await fetch(url, { method: "GET", headers: { "Range": "bytes=0-0" }, cache: "no-store" });
+        return res2.ok;
+      } catch {
+        return false;
       }
     }
   }
 
-  function generate(pretty=true) {
+  function buildItem({ category, num, createdAt, isPremium, hasMp4 }) {
+    const nn = pad3(num);
+    const id = `${category.categoryId}_${nn}`;
+    const prefix = category.fileNamePrefix;     // anime_ / silly_
+    const base = category.baseUrl;
+
+    const mp4Name = `${prefix}${nn}.mp4`;
+    const webpName = `${prefix}${nn}.webp`;
+    const previewName = `${prefix}${nn}_preview.webp`;
+
+    const mp4Url = `${base}${mp4Name}`;
+    const webpUrl = `${base}${webpName}`;
+    const previewUrl = `${base}${previewName}`;
+
+    const hasPreview = category.previewItemNumbers.includes(num);
+
+    // type: 0 video, 1 image
+    const type = hasMp4 ? 0 : 1;
+
+    const medias = [];
+    if (hasMp4) {
+      medias.push({
+        url: mp4Url,
+        name: mp4Name,
+        thumbUrl: "",
+        contentType: "video/mp4"
+      });
+      medias.push({
+        url: webpUrl,
+        name: webpName,
+        thumbUrl: hasPreview ? previewUrl : "",
+        contentType: "image/webp"
+      });
+    } else {
+      medias.push({
+        url: webpUrl,
+        name: webpName,
+        thumbUrl: "",
+        contentType: "image/webp"
+      });
+    }
+
+    return {
+      id,
+      medias,
+      categoryId: category.categoryId,
+      isPremium,
+      createdAt,
+      subType: 0,
+      type,
+      coinToUnlock: 0
+    };
+  }
+
+  async function generate(pretty=true) {
     clearUI();
+    outputEl.value = '';
+    dlEl.style.display = 'none';
+
+    const smart = chkHead.checked;
+    const incCreatedAt = chkCreatedAtInc.checked;
+    const isPremium = chkPremium.checked;
+
     try {
       const raw = inputEl.value.trim();
-      const data = JSON.parse(raw);
-      validateShape(data);
+      const categories = JSON.parse(raw);
+      validateCategoryConfig(categories);
 
-      const out = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+      const items = [];
+      let totalPlanned = 0;
+      for (const c of categories) {
+        const nums = (Array.isArray(c.orderItems) && c.orderItems.length > 0) ? c.orderItems
+                  : (Array.isArray(c.liveItemNumbers) ? c.liveItemNumbers : []);
+        totalPlanned += nums.length;
+      }
+
+      let done = 0;
+      statusEl.textContent = smart ? `Checking mp4... 0/${totalPlanned}` : `Generating...`;
+      statusEl.className = 'small';
+
+      for (const c of categories) {
+        const nums = (Array.isArray(c.orderItems) && c.orderItems.length > 0) ? c.orderItems
+                  : (Array.isArray(c.liveItemNumbers) ? c.liveItemNumbers : []);
+
+        for (let i = 0; i < nums.length; i++) {
+          const num = nums[i];
+          const createdAt = incCreatedAt ? (Number(c.baseCreatedAt) + items.length) : Number(c.baseCreatedAt);
+
+          let hasMp4 = true;
+          if (smart) {
+            const nn = pad3(num);
+            const mp4Url = `${c.baseUrl}${c.fileNamePrefix}${nn}.mp4`;
+            hasMp4 = await headExists(mp4Url);
+          }
+
+          items.push(buildItem({ category: c, num, createdAt, isPremium, hasMp4 }));
+
+          done++;
+          if (smart && (done % 5 === 0 || done === totalPlanned)) {
+            statusEl.textContent = `Checking mp4... ${done}/${totalPlanned}`;
+          }
+        }
+      }
+
+      const out = pretty ? JSON.stringify(items, null, 2) : JSON.stringify(items);
       outputEl.value = out;
-
       setDownload(out);
-      statusEl.textContent = `OK ✅ Generated (${out.length.toLocaleString()} chars)`;
+
+      statusEl.textContent = `OK ✅ Items: ${items.length} | chars: ${out.length.toLocaleString()}`;
       statusEl.className = 'small ok';
     } catch (e) {
-      outputEl.value = '';
-      dlEl.style.display = 'none';
       errEl.textContent = String(e && e.message ? e.message : e);
       statusEl.textContent = 'Lỗi ❌';
       statusEl.className = 'small err';
@@ -168,12 +265,42 @@
       statusEl.textContent = 'Copied ✅';
       statusEl.className = 'small ok';
     } catch {
-      statusEl.textContent = 'Copy failed ❌ (trình duyệt chặn clipboard)';
+      statusEl.textContent = 'Copy failed ❌ (browser chặn clipboard)';
       statusEl.className = 'small err';
     }
   });
 
-  // Auto-generate lần đầu
+  // Prefill input bằng category config bạn gửi ở tin trước (dán lại nếu muốn thay)
+  inputEl.value = `[
+  {
+    "baseCreatedAt": 1760677055,
+    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/101_anime/",
+    "categoryId": "101_anime",
+    "fileNamePrefix": "anime_",
+    "liveItemNumbers": [1,2,3,9,10,11,12,13,14,15,16,17,18,19,20,21,22,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86],
+    "previewItemNumbers": [1,2,3,52,80,60,46,19,10],
+    "doubleItems": [],
+    "daysItems": [],
+    "coupleItemsPreview": [],
+    "coupleItemsNoPreview": [],
+    "orderItems": [3,1,2,5,16,52,84,83,80,73,60,59,57,54,46,19,18,14,10,12,11,41,78,26,71,33,65,6,82,75,68,24,49,32,86,70,29,9,77,45,35,4,63,22,72,27,31,8,47,58,7,38,25,79,43,17,44,15,40,20,34,55,51,69,62,50,23,28,76,39,30,42,48,61,66,67,64,74,85,53,56,81]
+  },
+  {
+    "baseCreatedAt": 1760677055,
+    "baseUrl": "https://cdn.jsdelivr.net/gh/tramiune/tramiune001_res_wallpaper/resources/102_silly_smile/",
+    "categoryId": "102_silly_smile",
+    "fileNamePrefix": "silly_",
+    "liveItemNumbers": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,31],
+    "previewItemNumbers": [1,3,9,8,31],
+    "doubleItems": [],
+    "daysItems": [],
+    "coupleItemsPreview": [],
+    "coupleItemsNoPreview": [],
+    "orderItems": [1,3,9,8,15,18,31,14,22,6,21,11,2,24,5,17,19,4,12,20,7,16,10,13,23]
+  }
+]`;
+
+  // Auto-run
   generate(true);
 </script>
 </body>
