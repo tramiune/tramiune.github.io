@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Video Editor</title>
+    <style>
+        :root{--bd:#e7e7e7;--mut:#666}
+        body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+        header{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+        header b{font-size:14px}
+        .mut{color:var(--mut);font-size:12px}
+        main{padding:14px;display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
+        .card{border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:#fff}
+        .hd{padding:10px 12px;border-bottom:1px solid var(--bd);font-weight:600;font-size:13px}
+        .ct{padding:12px}
+        video{width:100%;max-height:70vh;background:#000;border-radius:12px}
+        canvas{width:100%;max-height:40vh;border-radius:12px;background:#111;display:block}
+        label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:10px 0;font-size:13px}
+        input[type="range"]{width:60%}
+        input[type="number"]{width:120px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px}
+        button,a.btn{
+          border:1px solid var(--bd);background:#fff;padding:8px 10px;border-radius:10px;cursor:pointer;
+          text-decoration:none;color:inherit;display:inline-flex;gap:6px;align-items:center
+        }
+        button:hover,a.btn:hover{background:#f5f5f5}
+        .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+        .status{white-space:pre-wrap;font-size:12px;color:var(--mut);margin-top:10px}
+        .k{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px}
+    </style>
+</head>
+<body>
+<header>
+    <b>Video Editor</b>
+    <span class="mut" id="info"></span>
+    <a class="btn" id="back" href="./browser.html">← Back</a>
+</header>
+
+<main>
+    <div class="card">
+        <div class="hd">Preview video</div>
+        <div class="ct">
+            <video id="v" controls playsinline></video>
+
+            <div class="row" style="margin-top:10px">
+                <button id="seekPrev">⏪ -0.1s</button>
+                <button id="seekNext">⏩ +0.1s</button>
+                <span class="mut">Time:</span>
+                <span class="k" id="t">0.000</span>
+                <span class="mut">/</span>
+                <span class="k" id="dur">0.000</span>
+            </div>
+
+            <label style="margin-top:12px">
+                <span>Scrub (sec)</span>
+                <input id="scrub" type="range" min="0" max="0" step="0.033" value="0"/>
+                <span class="k" id="scrubVal">0.000</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="hd">Export frame (webp) + Trim video</div>
+        <div class="ct">
+            <div class="mut">Frame preview (canvas):</div>
+            <canvas id="c"></canvas>
+
+            <div class="row" style="margin-top:10px">
+                <button id="capture">📸 Capture frame → .webp</button>
+                <button id="capturePreview" title="Xuất thêm file _preview.webp nhỏ hơn">🖼️ +preview.webp</button>
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--bd);margin:14px 0"/>
+
+            <div class="mut">Trim video (lite, export .webm):</div>
+            <label>
+                <span>Trim start (sec)</span>
+                <input id="start" type="number" min="0" step="0.1" value="0"/>
+            </label>
+            <label>
+                <span>Trim end (sec)</span>
+                <input id="end" type="number" min="0" step="0.1" value="0"/>
+            </label>
+            <label>
+                <span>Speed</span>
+                <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1"/>
+                <span class="k" id="speedVal">1.0x</span>
+            </label>
+
+            <div class="row" style="margin-top:10px">
+                <button id="apply">Apply speed to preview</button>
+                <button id="exportTrim">✂️ Export trimmed</button>
+            </div>
+
+            <div class="status" id="status"></div>
+        </div>
+    </div>
+</main>
+
+<script>
+    /** Repo config (giống browser) */
+    const OWNER = "tramiune";
+    const REPO  = "tramiune001_res_wallpaper";
+    const ROOT_DIR = "resources";
+    const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
+
+    const v = document.getElementById("v");
+    const c = document.getElementById("c");
+    const ctx = c.getContext("2d", { willReadFrequently: false });
+
+    const info = document.getElementById("info");
+    const statusEl = document.getElementById("status");
+    const tEl = document.getElementById("t");
+    const durEl = document.getElementById("dur");
+    const scrub = document.getElementById("scrub");
+    const scrubVal = document.getElementById("scrubVal");
+
+    const startEl = document.getElementById("start");
+    const endEl = document.getElementById("end");
+    const speedEl = document.getElementById("speed");
+    const speedVal = document.getElementById("speedVal");
+
+    function setStatus(s){ statusEl.textContent = s || ""; }
+
+    function qs() {
+      const p = new URLSearchParams(location.search);
+      return { folder: p.get("folder") || "", file: p.get("file") || "" };
+    }
+    function mediaUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
+    function baseName(file){
+      const i = file.lastIndexOf(".");
+      return i >= 0 ? file.slice(0, i) : file;
+    }
+    function downloadBlob(blob, filename){
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    }
+
+    function drawFrameToCanvas(){
+      if (!v.videoWidth || !v.videoHeight) return;
+      // giữ đúng kích thước gốc
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      ctx.drawImage(v, 0, 0, c.width, c.height);
+    }
+
+    async function seekTo(time){
+      const t = Math.max(0, Math.min(time, v.duration || 0));
+      v.pause();
+      v.currentTime = t;
+
+      // đảm bảo frame update xong
+      await new Promise(resolve => {
+        const onSeeked = () => { v.removeEventListener("seeked", onSeeked); resolve(); };
+        v.addEventListener("seeked", onSeeked, { once: true });
+      });
+
+      drawFrameToCanvas();
+      updateUI();
+    }
+
+    function updateUI(){
+      const ct = v.currentTime || 0;
+      tEl.textContent = ct.toFixed(3);
+      scrubVal.textContent = ct.toFixed(3);
+      scrub.value = String(ct);
+    }
+
+    speedEl.addEventListener("input", ()=> speedVal.textContent = `${Number(speedEl.value).toFixed(1)}x`);
+    document.getElementById("apply").onclick = ()=> { v.playbackRate = Number(speedEl.value) || 1; };
+
+    document.getElementById("seekPrev").onclick = ()=> seekTo((v.currentTime||0) - 0.1);
+    document.getElementById("seekNext").onclick = ()=> seekTo((v.currentTime||0) + 0.1);
+
+    scrub.addEventListener("input", ()=> {
+      // input event spam, chỉ update text
+      scrubVal.textContent = Number(scrub.value).toFixed(3);
+    });
+    scrub.addEventListener("change", ()=> seekTo(Number(scrub.value) || 0));
+
+    document.getElementById("capture").onclick = async () => {
+      const { file } = qs();
+      const out = `${baseName(file)}.webp`;
+
+      drawFrameToCanvas();
+      setStatus(`Capturing frame...\n→ ${out}`);
+
+      const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", 0.92));
+      if (!blob) throw new Error("toBlob failed (webp not supported?)");
+
+      downloadBlob(blob, out);
+      setStatus(`✅ Saved\n${out}`);
+    };
+
+    document.getElementById("capturePreview").onclick = async () => {
+      const { file } = qs();
+      const out = `${baseName(file)}_preview.webp`;
+
+      // scale nhỏ để làm preview (ví dụ chiều rộng 360)
+      drawFrameToCanvas();
+      const targetW = 360;
+      const scale = targetW / c.width;
+      const w = Math.max(1, Math.round(c.width * scale));
+      const h = Math.max(1, Math.round(c.height * scale));
+
+      const tmp = document.createElement("canvas");
+      tmp.width = w; tmp.height = h;
+      tmp.getContext("2d").drawImage(c, 0, 0, w, h);
+
+      setStatus(`Capturing preview...\n→ ${out}`);
+
+      const blob = await new Promise(resolve => tmp.toBlob(resolve, "image/webp", 0.85));
+      if (!blob) throw new Error("toBlob failed (webp not supported?)");
+
+      downloadBlob(blob, out);
+      setStatus(`✅ Saved\n${out}`);
+    };
+
+    /** Trim (lite) — export .webm bằng cách record lại từ canvas (không audio) */
+    async function exportTrimWebm(){
+      const { file } = qs();
+
+      const start = Math.max(0, Number(startEl.value) || 0);
+      const endIn = Math.max(0, Number(endEl.value) || 0);
+      const rate = Number(speedEl.value) || 1;
+
+      if (!v.duration || Number.isNaN(v.duration)) throw new Error("Video chưa load xong.");
+      const end = (endIn <= 0 || endIn > v.duration) ? v.duration : endIn;
+      if (end <= start) throw new Error("Trim end phải > trim start.");
+
+      const out = `${baseName(file)}_trim_${start.toFixed(1)}_${end.toFixed(1)}.webm`;
+
+      setStatus(`Exporting trim (lite)...\nstart=${start}s end=${end}s speed=${rate}x\n→ ${out}\n\nNote: output webm, no-audio (lite mode)`);
+
+      // setup canvas stream
+      drawFrameToCanvas();
+      const stream = c.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : "video/webm;codecs=vp8";
+
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+      const chunks = [];
+      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+
+      let rafId = 0;
+      const drawLoop = () => {
+        drawFrameToCanvas();
+        rafId = requestAnimationFrame(drawLoop);
+      };
+
+      v.pause();
+      v.currentTime = start;
+      v.playbackRate = rate;
+      v.muted = true;
+
+      await new Promise(resolve => v.addEventListener("seeked", resolve, { once:true }));
+
+      await v.play();
+      rec.start(500);
+      drawLoop();
+
+      const stopAll = async () => {
+        cancelAnimationFrame(rafId);
+        rec.stop();
+        v.pause();
+      };
+
+      const tick = () => {
+        if ((v.currentTime || 0) >= end) stopAll();
+        else requestAnimationFrame(tick);
+      };
+      tick();
+
+      await new Promise(resolve => rec.onstop = resolve);
+
+      const blob = new Blob(chunks, { type: mime });
+      downloadBlob(blob, out);
+
+      setStatus(`✅ Export done\n${out}`);
+    }
+
+    document.getElementById("exportTrim").onclick = async () => {
+      try { await exportTrimWebm(); }
+      catch(e){ alert(String(e?.message || e)); }
+    };
+
+    (async function init(){
+      const { folder, file } = qs();
+      if (!folder || !file) {
+        info.textContent = "Thiếu query ?folder=...&file=...";
+        setStatus("Mở từ browser.html bằng nút Edit (video) để tự fill query.");
+        return;
+      }
+
+      info.textContent = `${folder}/${file}`;
+      v.src = mediaUrl(folder, file);
+
+      v.addEventListener("loadedmetadata", async () => {
+        durEl.textContent = (v.duration || 0).toFixed(3);
+        scrub.max = String(v.duration || 0);
+        startEl.value = "0";
+        endEl.value = (v.duration || 0).toFixed(1);
+
+        await seekTo(0);
+      });
+
+      // update time khi play
+      v.addEventListener("timeupdate", () => {
+        if (!v.paused) {
+          updateUI();
+          // chỉ redraw nếu muốn preview “live”
+          // drawFrameToCanvas();
+        }
+      });
+    })();
+</script>
+</body>
+</html>

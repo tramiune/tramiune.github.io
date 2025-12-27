@@ -177,85 +177,119 @@
   }
 
   function renderGrid(files) {
-    elGrid.innerHTML = "";
-    const q = elQ.value.trim().toLowerCase();
-    const showPreview = elShowPreview.checked;
+  elGrid.innerHTML = "";
+  const q = elQ.value.trim().toLowerCase();
+  const showPreview = elShowPreview.checked;
 
-    // map base -> preview
-    const previewByBase = new Map();
-    for (const f of files) {
-      if (!isMediaFile(f.name)) continue;
-      if (!isPreviewName(f.name)) continue;
-      const base = f.name.replace("_preview.", ".");
-      previewByBase.set(base, f.name);
-    }
+  // map: baseFile -> previewFile
+  const previewByBase = new Map();
+  for (const f of files) {
+    if (!isMediaFile(f.name)) continue;
+    if (!isPreviewName(f.name)) continue;
+    const base = f.name.replace("_preview.", ".");
+    previewByBase.set(base, f.name);
+  }
 
-    let shown = files
-      .filter(f => isMediaFile(f.name))
-      .filter(f => f.name.toLowerCase().includes(q));
+  let shown = files
+    .filter(f => isMediaFile(f.name))
+    .filter(f => f.name.toLowerCase().includes(q));
 
-    if (!showPreview) shown = shown.filter(f => !isPreviewName(f.name));
+  if (!showPreview) {
+    shown = shown.filter(f => !isPreviewName(f.name));
+  }
 
-    elItemCount.textContent = `Items: ${shown.length}`;
+  elItemCount.textContent = `Items: ${shown.length}`;
 
-    for (const f of shown) {
-      const e = extOf(f.name);
-      const card = document.createElement("div");
-      card.className = "card";
+  for (const f of shown) {
+    const e = extOf(f.name);
+    const isVideo = VIDEO_EXT.includes(e);
 
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
+    const card = document.createElement("div");
+    card.className = "card";
 
-      const maybePreview = previewByBase.get(f.name);
-      const url = (!isPreviewName(f.name) && maybePreview && IMAGE_EXT.includes(e))
+    /* ---------- THUMB ---------- */
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+
+    const maybePreview = previewByBase.get(f.name);
+    const srcUrl =
+      (!isPreviewName(f.name) && maybePreview && !isVideo)
         ? mediaUrl(activeFolder, maybePreview)
         : mediaUrl(activeFolder, f.name);
 
-      if (VIDEO_EXT.includes(e)) {
-        const v = document.createElement("video");
-        v.src = url;
-        v.controls = true;
-        v.muted = true;
-        v.playsInline = true;
-        v.preload = "metadata";
-        thumb.appendChild(v);
-      } else {
-        const img = document.createElement("img");
-        img.loading = "lazy";
-        img.src = url;
-        img.alt = f.name;
-        thumb.appendChild(img);
-      }
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.innerHTML = `
-        <div class="name" title="${f.name}">${f.name}</div>
-        <div class="pill">${VIDEO_EXT.includes(e) ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}</div>
-        <div class="small" style="margin-top:6px;">
-          <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">open file</a>
-        </div>
-      `;
-
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "🗑 Delete";
-      delBtn.className = "danger";
-      delBtn.style.marginTop = "8px";
-      delBtn.onclick = async () => {
-        try {
-          await deleteFileFlow(f);
-        } catch (err) {
-          alert(String(err?.message || err));
-        }
-      };
-
-      meta.appendChild(delBtn);
-
-      card.appendChild(thumb);
-      card.appendChild(meta);
-      elGrid.appendChild(card);
+    if (isVideo) {
+      const v = document.createElement("video");
+      v.src = srcUrl;
+      v.controls = true;
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = "metadata";
+      thumb.appendChild(v);
+    } else {
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.src = srcUrl;
+      img.alt = f.name;
+      thumb.appendChild(img);
     }
+
+    /* ---------- META ---------- */
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML = `
+      <div class="name" title="${f.name}">${f.name}</div>
+      <div class="pill">
+        ${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}
+      </div>
+      <div class="small" style="margin-top:6px;">
+        <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">
+          open file
+        </a>
+      </div>
+    `;
+
+    /* ---------- ACTIONS ---------- */
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    actions.style.flexWrap = "wrap";
+    actions.style.marginTop = "8px";
+
+    // 🗑 Delete
+    const delBtn = document.createElement("button");
+    delBtn.textContent = "🗑 Delete";
+    delBtn.className = "danger";
+    delBtn.onclick = async () => {
+      try {
+        await deleteFileFlow(f);
+      } catch (err) {
+        alert(String(err?.message || err));
+      }
+    };
+    actions.appendChild(delBtn);
+
+    // ✂️ Edit (CHỈ CHO VIDEO)
+    if (isVideo) {
+      const editBtn = document.createElement("a");
+      editBtn.textContent = "✂️ Edit";
+      editBtn.className = "btn";
+      editBtn.href =
+        `./video_editor.html` +
+        `?folder=${encodeURIComponent(activeFolder)}` +
+        `&file=${encodeURIComponent(f.name)}`;
+      editBtn.target = "_blank"; // mở tab mới cho tiện
+      actions.appendChild(editBtn);
+    }
+
+    meta.appendChild(actions);
+
+    /* ---------- BUILD ---------- */
+    card.appendChild(thumb);
+    card.appendChild(meta);
+    elGrid.appendChild(card);
   }
+}
+
 
   function getAuthToken() {
     const t = elToken.value.trim();
