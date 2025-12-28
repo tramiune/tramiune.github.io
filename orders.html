@@ -21,9 +21,9 @@
           text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
         }
         button:hover, a.btn:hover { background:#f5f5f5; }
-        .danger { border-color:#f0c1c1 !important; }
         label.mut { display:inline-flex; gap:6px; align-items:center; }
         input[type="checkbox"] { transform: translateY(1px); }
+        .danger { border-color:#f0c1c1 !important; }
 
         .wrap { display:grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 64px); }
         aside { border-right:1px solid var(--bd); padding:10px; overflow:auto; }
@@ -49,27 +49,47 @@
           width:120px; aspect-ratio: 9/16; background:#f2f2f2; display:flex; align-items:center; justify-content:center;
           overflow:hidden;
         }
-        .thumb img, .thumb video { width:100%; height:100%; object-fit:cover; display:block; }
+        /* QUAN TRỌNG: để không "ăn drag" */
+        .thumb img, .thumb video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
         .meta { padding:10px 10px 10px 0; }
         .name { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; margin-top:6px; }
-        .handle { cursor:grab; user-select:none; padding:6px 8px; border:1px dashed #ddd; border-radius:10px; display:inline-flex; gap:6px; align-items:center; }
-        .handle:active { cursor:grabbing; }
         .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
         .hint { font-size:12px; color:var(--mut); margin-top:6px; }
 
-        .dropHint {
-          border:1px dashed #bbb; border-radius:14px; padding:12px; text-align:center; color:var(--mut);
-          display:none;
+        .handle {
+          cursor:grab; user-select:none;
+          padding:6px 8px; border:1px dashed #ddd; border-radius:10px;
+          display:inline-flex; gap:6px; align-items:center;
+          touch-action:none; /* để kéo trên mobile mượt */
         }
-        .item.dragging { opacity:0.55; }
+        .handle:active { cursor:grabbing; }
+
+        /* dragging ghost */
+        .drag-ghost {
+          position: fixed;
+          z-index: 9999;
+          width: min(620px, calc(100vw - 24px));
+          box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+          border:1px solid #ddd;
+          background:#fff;
+          border-radius:14px;
+          overflow:hidden;
+          pointer-events:none;
+          transform: translate(-50%, -50%);
+        }
+        .placeholder {
+          border:1px dashed #bbb;
+          border-radius:14px;
+          background: #fafafa;
+        }
     </style>
 </head>
 <body>
 
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả sắp xếp item theo folder · có thumbnail · LIVE tick preview</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE tick preview</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -83,7 +103,7 @@
     <button id="loadLocal">Load orders (local)</button>
     <button id="uploadOrders">Upload dev/orders.json</button>
 
-    <button id="genAll">Generate JSON (ALL, ordered)</button>
+    <button id="genAll">Generate JSON (ALL like browser)</button>
     <span class="mut" id="rate"></span>
 </header>
 
@@ -106,21 +126,19 @@
         </div>
 
         <div class="status" id="status"></div>
-        <div class="dropHint" id="dropHint">Thả để đổi vị trí</div>
         <div class="list" id="list"></div>
     </main>
 </div>
 
 <script>
     /** =========================
-     *  CONFIG
+     *  CONFIG (giống browser)
      *  ========================= */
-    const RES_OWNER = "tramiune";
-    const RES_REPO  = "tramiune001_res_wallpaper";
-    const RES_BRANCH = "main";
+    const OWNER = "tramiune";
+    const REPO  = "tramiune001_res_wallpaper";
+    const BRANCH = "main";
     const ROOT_DIR = "resources";
-
-    const CDN_BASE = `https://cdn.jsdelivr.net/gh/${RES_OWNER}/${RES_REPO}/${ROOT_DIR}/`;
+    const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
     const OUTPUT_ALL_JSON = "dev/wallpaper.json";
     const ORDERS_PATH = "dev/orders.json";
@@ -142,11 +160,11 @@
     const elRate = document.getElementById("rate");
     const elToken = document.getElementById("token");
     const elRememberToken = document.getElementById("rememberToken");
-    const elDropHint = document.getElementById("dropHint");
 
     let allFolders = [];          // [{name,path}]
     let activeFolder = null;
-    let folderCache = new Map();  // folderName -> { files:[name], items:[item], updatedAt }
+    let folderCache = new Map();  // folderName -> { files:[name], items:[item] }
+
     let ordersState = {
       version: 1,
       updatedAt: 0,
@@ -158,11 +176,11 @@
     /** ========= utils ========= */
     function setStatus(s){ elStatus.textContent = s || ""; }
     function extOf(name){ const i=name.lastIndexOf("."); return i>=0?name.slice(i+1).toLowerCase():""; }
-    function isPreviewName(name){ return name.includes("_preview."); }
     function pad3(n){ return String(n).padStart(3,"0"); }
     function encodePath(path){ return path.split("/").map(encodeURIComponent).join("/"); }
     function cdnUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
     function folderDefaultPrefix(folderName){ return folderName.replace(/^\d+_/, ""); }
+    function isPreviewName(name){ return name.includes("_preview."); }
     function contentTypeFromExt(name){
       const e=extOf(name);
       if (e==="webp") return "image/webp";
@@ -174,7 +192,18 @@
       if (e==="mov") return "video/quicktime";
       return "application/octet-stream";
     }
-    function hourToHHMM(h){ const hh=String(h).padStart(2,"0"); return `${hh}:00`; }
+    function hourToHHMM(h){
+      const hh = String(parseInt(h,10)).padStart(2,"0");
+      return `${hh}:00`;
+    }
+    function typeLabel(t){
+      if (t===TYPE.LIVE) return "LIVE";
+      if (t===TYPE.STILL) return "STILL";
+      if (t===TYPE.DOUBLE) return "DOUBLE";
+      if (t===TYPE.DAYS) return "DAYS";
+      if (t===TYPE.COUPLE) return "COUPLE";
+      return String(t);
+    }
 
     function getAuthToken(){
       const t = elToken.value.trim();
@@ -195,11 +224,11 @@
       return res.json();
     }
     function ghContentsUrl(path){
-      return `https://api.github.com/repos/${RES_OWNER}/${RES_REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(RES_BRANCH)}`;
+      return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(BRANCH)}`;
     }
 
     /** ========= token localStorage ========= */
-    const LS_TOKEN = `orders_token_${RES_OWNER}_${RES_REPO}`;
+    const LS_TOKEN = `orders_token_${OWNER}_${REPO}`;
     (function initToken(){
       const saved = localStorage.getItem(LS_TOKEN);
       if (saved) { elToken.value = saved; elRememberToken.checked = true; }
@@ -216,7 +245,7 @@
     })();
 
     /** ========= orders localStorage ========= */
-    const LS_ORDERS = `orders_state_${RES_OWNER}_${RES_REPO}`;
+    const LS_ORDERS = `orders_state_${OWNER}_${REPO}`;
     function saveOrdersLocal(){
       ordersState.updatedAt = Math.floor(Date.now()/1000);
       localStorage.setItem(LS_ORDERS, JSON.stringify(ordersState));
@@ -227,21 +256,21 @@
       try { return JSON.parse(raw); } catch { return null; }
     }
 
-    /** ========= Git upsert small text file (orders.json / wallpaper.json) ========= */
+    /** ========= Git upsert text file ========= */
     async function upsertTextFile(path, text, message) {
       const token = getAuthToken();
-      const apiUrl = `https://api.github.com/repos/${RES_OWNER}/${RES_REPO}/contents/${encodePath(path)}`;
+      const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
 
       // check sha if exists
       let sha = null;
       try {
-        const meta = await fetchJson(apiUrl + `?ref=${encodeURIComponent(RES_BRANCH)}`, true);
+        const meta = await fetchJson(apiUrl + `?ref=${encodeURIComponent(BRANCH)}`, true);
         sha = meta?.sha || null;
       } catch { sha = null; }
 
       const contentB64 = btoa(unescape(encodeURIComponent(text)));
 
-      const body = { message, content: contentB64, branch: RES_BRANCH };
+      const body = { message, content: contentB64, branch: BRANCH };
       if (sha) body.sha = sha;
 
       const res = await fetch(apiUrl, {
@@ -260,34 +289,79 @@
       }
     }
 
-    /** ========= Build items from folder files (FIX gộp sai) ========= */
-    function buildItemsFromFiles(folderName, fileNames, baseCreatedAt) {
+    /** ========= Orders helpers ========= */
+    function ensureCategoryState(catId){
+      if (!ordersState.categories[catId]) {
+        ordersState.categories[catId] = { order: [], liveUsePreview: {} };
+      }
+      return ordersState.categories[catId];
+    }
+    function syncOrderFromDOM(catId){
+      const st = ensureCategoryState(catId);
+      const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
+      st.order = ids;
+    }
+    function applyOrder(catId, items){
+      const st = ensureCategoryState(catId);
+      const byId = new Map(items.map(it => [it.id, it]));
+      const out = [];
+
+      for (const id of st.order) {
+        const it = byId.get(id);
+        if (it) { out.push(it); byId.delete(id); }
+      }
+      for (const it of byId.values()) out.push(it);
+      return out;
+    }
+
+    /** ========= Build items (GIỐNG LOGIC browser bạn muốn) =========
+     * Rule:
+     * - LIVE: có mp4 + webp cùng số -> type=0, medias[0]=video, medias[1]=image, thumbUrl=preview (tùy checkbox)
+     * - STILL: chỉ webp -> type=1
+     * - COUPLE: file bắt đầu couple_... -> type=4
+     * - DOUBLE: double_###_0.webp + double_###_1.webp -> type=2 (2 ảnh)
+     * - DAYS: days_###_6h/12h/18h/24h.webp -> type=3 (4 ảnh có hour)
+     *
+     * ID: KHÔNG TRÙNG -> mặc định id = `${categoryId}_${num}` (num 3 chữ số)
+     */
+    function buildItemsFromFiles(folderName, fileNames) {
+      const categoryId = folderName;
       const defPrefix = folderDefaultPrefix(folderName);
 
-      const previewByKey = new Map(); // prefix|num -> preview file
-      const imageByKey = new Map();   // prefix|num -> still image
-      const mp4ByKey = new Map();     // prefix|num -> mp4 (non _noSound)
-      const doubleByNum = new Map();  // num -> {0,1}
-      const coupleByNum = new Map();  // num -> {single,0,1,preview}
-      const daysByNum = new Map();    // num -> Map(hour -> file)
+      const previewByBaseImage = new Map(); // key: baseImageName -> previewFileName
+      for (const name of fileNames) {
+        const m = name.match(/^(.*)_(\d{1,})_preview\.webp$/i);
+        if (m) {
+          const base = `${m[1]}_${pad3(m[2])}.webp`;
+          previewByBaseImage.set(base, name);
+        }
+      }
+
+      // group for special types
+      const doubleByNum = new Map(); // num -> {0,1}
+      const daysByNum = new Map();   // num -> Map(hour -> file)
+      const coupleByNum = new Map(); // num -> {single,0,1,preview}
+
+      // live/still sets: key prefix|num
+      const mp4ByKey = new Map();
+      const imgByKey = new Map();
 
       for (const name of fileNames) {
-        // preview
-        let m = name.match(/^(.*)_(\d{1,})_preview\.webp$/i);
-        if (m) {
-          const prefix = m[1];
-          const num = pad3(m[2]);
-          previewByKey.set(`${prefix}|${num}`, name);
-          if (prefix === "couple") {
-            const c = coupleByNum.get(num) || {};
-            c.preview = name;
-            coupleByNum.set(num, c);
+        // skip preview files in base scanning
+        if (isPreviewName(name)) {
+          // couple preview
+          const cm = name.match(/^couple_(\d{1,})_preview\.webp$/i);
+          if (cm) {
+            const num = pad3(cm[1]);
+            const obj = coupleByNum.get(num) || {};
+            obj.preview = name;
+            coupleByNum.set(num, obj);
           }
           continue;
         }
 
-        // double
-        m = name.match(/^double_(\d{1,})_([01])\.webp$/i);
+        // DOUBLE
+        let m = name.match(/^double_(\d{1,})_([01])\.webp$/i);
         if (m) {
           const num = pad3(m[1]);
           const idx = m[2];
@@ -297,28 +371,7 @@
           continue;
         }
 
-        // couple pair
-        m = name.match(/^couple_(\d{1,})_([01])\.webp$/i);
-        if (m) {
-          const num = pad3(m[1]);
-          const idx = m[2];
-          const obj = coupleByNum.get(num) || {};
-          obj[idx] = name;
-          coupleByNum.set(num, obj);
-          continue;
-        }
-
-        // couple single
-        m = name.match(/^couple_(\d{1,})\.webp$/i);
-        if (m) {
-          const num = pad3(m[1]);
-          const obj = coupleByNum.get(num) || {};
-          obj.single = name;
-          coupleByNum.set(num, obj);
-          continue;
-        }
-
-        // days
+        // DAYS
         m = name.match(/^days_(\d{1,})_(\d{1,2})h\.webp$/i);
         if (m) {
           const num = pad3(m[1]);
@@ -329,8 +382,28 @@
           continue;
         }
 
-        // mp4
+        // COUPLE
+        m = name.match(/^couple_(\d{1,})\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const obj = coupleByNum.get(num) || {};
+          obj.single = name;
+          coupleByNum.set(num, obj);
+          continue;
+        }
+        m = name.match(/^couple_(\d{1,})_([01])\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const idx = m[2];
+          const obj = coupleByNum.get(num) || {};
+          obj[idx] = name;
+          coupleByNum.set(num, obj);
+          continue;
+        }
+
+        // LIVE / STILL (prefix_num)
         const e = extOf(name);
+
         if (VIDEO_EXT.includes(e)) {
           if (name.includes("_noSound.")) continue;
           m = name.match(/^(.*)_(\d{1,})\.(mp4|webm|mov)$/i);
@@ -342,42 +415,43 @@
           continue;
         }
 
-        // still image normal
         if (IMAGE_EXT.includes(e)) {
+          // ignore double/days/couple variants already handled
+          if (/^(double_|days_|couple_)/i.test(name)) continue;
+
           m = name.match(/^(.*)_(\d{1,})\.(webp|png|jpg|jpeg|gif)$/i);
           if (m) {
             const prefix = m[1];
             const num = pad3(m[2]);
-            if (prefix === "days" || prefix === "double") continue;
-            if (prefix === "couple" && name.match(/^couple_\d{1,}_[01]\.webp$/i)) continue;
-            imageByKey.set(`${prefix}|${num}`, name);
+            imgByKey.set(`${prefix}|${num}`, name);
           }
           continue;
         }
       }
 
+      let createdAt = Math.floor(Date.now()/1000);
       const items = [];
-      let ts = baseCreatedAt;
 
-      // DOUBLE
+      // DOUBLE items
       for (const [num, obj] of [...doubleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         if (!obj["0"] || !obj["1"]) continue;
         items.push({
-          idBase: `${folderName}_double_${num}`,
-          categoryId: folderName,
-          type: TYPE.DOUBLE,
-          subType: 0,
+          id: `${categoryId}_${num}`,
+          categoryId,
           isPremium: true,
+          createdAt: createdAt++,
+          subType: 0,
+          type: TYPE.DOUBLE,
           coinToUnlock: 0,
-          createdAt: ts++,
           medias: [
             { url: cdnUrl(folderName, obj["0"]), name: obj["0"], thumbUrl:"", contentType:"image/webp" },
             { url: cdnUrl(folderName, obj["1"]), name: obj["1"], thumbUrl:"", contentType:"image/webp" },
-          ]
+          ],
+          _thumb: cdnUrl(folderName, obj["0"])
         });
       }
 
-      // DAYS
+      // DAYS items
       for (const [num, hm] of [...daysByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         const order = ["6","12","18","24"];
         const medias = [];
@@ -394,25 +468,27 @@
         }
         if (!medias.length) continue;
         items.push({
-          idBase: `${folderName}_days_${num}`,
-          categoryId: folderName,
-          type: TYPE.DAYS,
-          subType: 0,
+          id: `${categoryId}_${num}`,
+          categoryId,
           isPremium: true,
+          createdAt: createdAt++,
+          subType: 0,
+          type: TYPE.DAYS,
           coinToUnlock: 0,
-          createdAt: ts++,
-          medias
+          medias,
+          _thumb: medias[0].url
         });
       }
 
-      // COUPLE
+      // COUPLE items
       for (const [num, obj] of [...coupleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         const medias = [];
         if (obj.single) {
+          const preview = obj.preview ? cdnUrl(folderName, obj.preview) : (previewByBaseImage.get(obj.single) ? cdnUrl(folderName, previewByBaseImage.get(obj.single)) : "");
           medias.push({
             url: cdnUrl(folderName, obj.single),
             name: obj.single,
-            thumbUrl: obj.preview ? cdnUrl(folderName, obj.preview) : "",
+            thumbUrl: preview || "",
             contentType: "image/webp"
           });
         } else {
@@ -421,290 +497,92 @@
         }
         if (!medias.length) continue;
         items.push({
-          idBase: `${folderName}_${num}`,
-          categoryId: folderName,
-          type: TYPE.COUPLE,
-          subType: 0,
+          id: `${categoryId}_${num}`,
+          categoryId,
           isPremium: true,
+          createdAt: createdAt++,
+          subType: 0,
+          type: TYPE.COUPLE,
           coinToUnlock: 0,
-          createdAt: ts++,
-          medias
+          medias,
+          _thumb: medias[0].thumbUrl || medias[0].url
         });
       }
 
-      // LIVE / STILL by key prefix|num
-      const keys = new Set([...imageByKey.keys(), ...mp4ByKey.keys()]);
+      // LIVE / STILL items
+      const keys = new Set([...mp4ByKey.keys(), ...imgByKey.keys()]);
       const sortedKeys = [...keys].sort((a,b)=>{
-        const [pa,na]=a.split("|"); const [pb,nb]=b.split("|");
+        const na=a.split("|")[1], nb=b.split("|")[1];
         if (na!==nb) return na.localeCompare(nb);
-        return pa.localeCompare(pb);
+        return a.localeCompare(b);
       });
 
       for (const key of sortedKeys) {
         const [prefix, num] = key.split("|");
         const mp4 = mp4ByKey.get(key);
-        const img = imageByKey.get(key);
-        if (!mp4 && !img) continue;
+        const img = imgByKey.get(key);
 
-        const idBase = (prefix === defPrefix) ? `${folderName}_${num}` : `${folderName}_${prefix}_${num}`;
+        // ID theo browser: nếu prefix == defPrefix thì id = folder_num, còn khác prefix thì vẫn dùng folder_num (để không bị lệch) -> bạn muốn giống browser (category_num)
+        const id = `${categoryId}_${num}`;
 
         if (mp4) {
-          const previewFile = previewByKey.get(`${prefix}|${num}`);
+          // LIVE
+          const previewFile = img ? previewByBaseImage.get(img) : null;
           const previewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
+
           items.push({
-            idBase,
-            categoryId: folderName,
-            type: TYPE.LIVE,
-            subType: 0,
+            id,
+            categoryId,
             isPremium: true,
+            createdAt: createdAt++,
+            subType: 0,
+            type: TYPE.LIVE,
             coinToUnlock: 0,
-            createdAt: ts++,
             medias: [
               { url: cdnUrl(folderName, mp4), name: mp4, thumbUrl:"", contentType: contentTypeFromExt(mp4) },
               ...(img ? [{
                 url: cdnUrl(folderName, img),
                 name: img,
-                thumbUrl: previewUrl,              // sẽ bật/tắt theo checkbox (orders)
+                thumbUrl: previewUrl, // sẽ bật/tắt theo checkbox
                 contentType: contentTypeFromExt(img)
               }] : [])
             ],
             _livePreviewUrl: previewUrl,
-            _hasPreview: !!previewUrl
+            _hasPreview: !!previewUrl,
+            _thumb: (previewUrl || (img ? cdnUrl(folderName, img) : cdnUrl(folderName, mp4)))
           });
-        } else {
+        } else if (img) {
+          // STILL
           items.push({
-            idBase,
-            categoryId: folderName,
-            type: TYPE.STILL,
-            subType: 0,
+            id,
+            categoryId,
             isPremium: true,
+            createdAt: createdAt++,
+            subType: 0,
+            type: TYPE.STILL,
             coinToUnlock: 0,
-            createdAt: ts++,
             medias: [
               { url: cdnUrl(folderName, img), name: img, thumbUrl:"", contentType: contentTypeFromExt(img) }
-            ]
+            ],
+            _thumb: cdnUrl(folderName, img)
           });
         }
       }
 
-      // stable sort by idBase
-      items.sort((a,b)=>a.idBase.localeCompare(b.idBase,"en"));
+      // IMPORTANT: nếu trùng id trong cùng folder (do file lỗi), để Orders vẫn render được:
+      const seen = new Map();
+      for (const it of items) {
+        const c = (seen.get(it.id) || 0) + 1;
+        seen.set(it.id, c);
+        if (c > 1) it.id = `${it.id}_${c}`; // chỉ để UI/Orders ổn, khi export sẽ unique global tiếp
+      }
+
+      // sort ổn định theo id
+      items.sort((a,b)=>a.id.localeCompare(b.id,"en"));
       return items;
     }
 
-    /** ========= orders apply + render ========= */
-    function ensureCategoryState(catId){
-      if (!ordersState.categories[catId]) {
-        ordersState.categories[catId] = { order: [], liveUsePreview: {} };
-      }
-      return ordersState.categories[catId];
-    }
-
-    function applyOrder(catId, items){
-      const st = ensureCategoryState(catId);
-
-      const byId = new Map(items.map(it => [it.idBase, it]));
-      const out = [];
-
-      // take ordered ones first
-      for (const id of st.order) {
-        const it = byId.get(id);
-        if (it) { out.push(it); byId.delete(id); }
-      }
-      // append the rest
-      for (const it of byId.values()) out.push(it);
-
-      return out;
-    }
-
-    function syncOrderFromDOM(catId){
-      const st = ensureCategoryState(catId);
-      const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
-      st.order = ids;
-    }
-
-    function pickThumbForItem(item){
-      // returns {kind:"image"|"video", src:"..."}
-      if (item.type === TYPE.LIVE) {
-        // ưu tiên thumbUrl (preview) nếu đang bật; nếu không thì dùng image url; nếu không có image thì dùng video
-        const img = item.medias.find(m => (m.contentType||"").startsWith("image/"));
-        const vid = item.medias.find(m => (m.contentType||"").startsWith("video/"));
-        if (img) return { kind:"image", src: img.thumbUrl || img.url };
-        if (vid) return { kind:"video", src: vid.url };
-        return { kind:"image", src:"" };
-      }
-      if (item.type === TYPE.DAYS) {
-        const m = item.medias[0];
-        return { kind:"image", src: m?.url || "" };
-      }
-      if (item.type === TYPE.DOUBLE) {
-        const m = item.medias[0];
-        return { kind:"image", src: m?.url || "" };
-      }
-      // couple/still
-      const img = item.medias.find(m => (m.contentType||"").startsWith("image/"));
-      if (img) return { kind:"image", src: img.thumbUrl || img.url };
-      const vid = item.medias.find(m => (m.contentType||"").startsWith("video/"));
-      if (vid) return { kind:"video", src: vid.url };
-      return { kind:"image", src:"" };
-    }
-
-    function typeLabel(t){
-      if (t===TYPE.LIVE) return "LIVE";
-      if (t===TYPE.STILL) return "STILL";
-      if (t===TYPE.DOUBLE) return "DOUBLE";
-      if (t===TYPE.DAYS) return "DAYS";
-      if (t===TYPE.COUPLE) return "COUPLE";
-      return String(t);
-    }
-
-    function renderItems(catId, items){
-      elList.innerHTML = "";
-      const q = elQ.value.trim().toLowerCase();
-      const st = ensureCategoryState(catId);
-
-      const filtered = items.filter(it => it.idBase.toLowerCase().includes(q));
-      elItemCount.textContent = `Items: ${filtered.length}/${items.length}`;
-
-      for (const it of filtered) {
-        const row = document.createElement("div");
-        row.className = "item";
-        row.draggable = true;
-        row.dataset.id = it.idBase;
-
-        const thumb = document.createElement("div");
-        thumb.className = "thumb";
-
-        const picked = pickThumbForItem(it);
-        if (picked.kind === "video") {
-          const v = document.createElement("video");
-          v.src = picked.src;
-          v.muted = true;
-          v.playsInline = true;
-          v.loop = true;
-          v.autoplay = true;
-          v.preload = "metadata";
-          thumb.appendChild(v);
-        } else {
-          const img = document.createElement("img");
-          img.loading = "lazy";
-          img.src = picked.src;
-          img.alt = it.idBase;
-          thumb.appendChild(img);
-        }
-
-        const meta = document.createElement("div");
-        meta.className = "meta";
-
-        const pill = `${typeLabel(it.type)} · ${it.idBase}`;
-        meta.innerHTML = `
-          <div class="row" style="justify-content:space-between;">
-            <div class="name" title="${it.idBase}">${it.idBase}</div>
-            <div class="handle" title="Kéo để đổi vị trí">⠿ Drag</div>
-          </div>
-          <div class="pill">${pill}</div>
-        `;
-
-        const actions = document.createElement("div");
-        actions.className = "actions";
-
-        // open first media
-        const openBtn = document.createElement("a");
-        openBtn.className = "btn";
-        openBtn.textContent = "🔗 Open";
-        openBtn.href = (it.medias[0]?.url || "#");
-        openBtn.target = "_blank";
-        openBtn.rel = "noreferrer";
-        actions.appendChild(openBtn);
-
-        // LIVE preview toggle
-        if (it.type === TYPE.LIVE) {
-          const hasPreview = !!it._hasPreview;
-          const checked = hasPreview ? (st.liveUsePreview[it.idBase] ?? true) : false;
-
-          const lb = document.createElement("label");
-          lb.className = "mut";
-          lb.title = "Trong JSON: nếu tick thì medias[1].thumbUrl = ..._preview.webp, nếu bỏ tick thì thumbUrl = \"\"";
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.disabled = !hasPreview;
-          cb.checked = checked;
-
-          cb.onchange = () => {
-            st.liveUsePreview[it.idBase] = cb.checked;
-            // cập nhật thumb ngay cho UI
-            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
-            if (img) img.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
-            // rerender thumb nhanh
-            renderItems(catId, items);
-          };
-
-          lb.appendChild(cb);
-          lb.appendChild(document.createTextNode(" use preview thumb"));
-          actions.appendChild(lb);
-
-          if (!hasPreview) {
-            const h = document.createElement("div");
-            h.className = "hint";
-            h.textContent = "LIVE này không có _preview.webp";
-            actions.appendChild(h);
-          }
-        }
-
-        meta.appendChild(actions);
-
-        row.appendChild(thumb);
-        row.appendChild(meta);
-        elList.appendChild(row);
-      }
-
-      // drag & drop
-      let dragging = null;
-
-      elList.querySelectorAll(".item").forEach(el => {
-        el.addEventListener("dragstart", (e) => {
-          dragging = el;
-          el.classList.add("dragging");
-          e.dataTransfer.effectAllowed = "move";
-          elDropHint.style.display = "block";
-        });
-
-        el.addEventListener("dragend", () => {
-          el.classList.remove("dragging");
-          elDropHint.style.display = "none";
-          dragging = null;
-          syncOrderFromDOM(catId);
-        });
-
-        el.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          if (!dragging || dragging === el) return;
-
-          const rect = el.getBoundingClientRect();
-          const before = (e.clientY - rect.top) < rect.height / 2;
-          if (before) {
-            elList.insertBefore(dragging, el);
-          } else {
-            elList.insertBefore(dragging, el.nextSibling);
-          }
-        });
-      });
-    }
-
-    /** ========= folder load ========= */
-    async function loadFolders() {
-      setStatus("Loading folders... (requires token)");
-      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
-      allFolders = data
-        .filter(x => x.type === "dir")
-        .map(x => ({ name: x.name, path: x.path }))
-        .filter(x => /^\d+_/.test(x.name))
-        .sort((a,b) => a.name.localeCompare(b.name, "en"));
-
-      renderFolders();
-      setStatus("");
-    }
-
+    /** ========= render ========= */
     function renderFolders(){
       elFolders.innerHTML = "";
       const q = elQ.value.trim().toLowerCase();
@@ -720,6 +598,234 @@
       }
     }
 
+    function renderItems(catId, items){
+      elList.innerHTML = "";
+      const q = elQ.value.trim().toLowerCase();
+      const st = ensureCategoryState(catId);
+
+      const filtered = items.filter(it => it.id.toLowerCase().includes(q));
+      elItemCount.textContent = `Items: ${filtered.length}/${items.length}`;
+
+      for (const it of filtered) {
+        const row = document.createElement("div");
+        row.className = "item";
+        row.dataset.id = it.id;
+
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+
+        // thumb
+        const thumbSrc = it._thumb || (it.medias[0]?.url || "");
+        if ((it.medias[0]?.contentType || "").startsWith("video/") && it.type === TYPE.LIVE && !it.medias.find(m => (m.contentType||"").startsWith("image/"))) {
+          const v = document.createElement("video");
+          v.src = thumbSrc;
+          v.muted = true; v.playsInline = true; v.loop = true; v.autoplay = true;
+          v.preload = "metadata";
+          thumb.appendChild(v);
+        } else {
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.src = thumbSrc;
+          img.alt = it.id;
+          thumb.appendChild(img);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = `
+          <div class="row" style="justify-content:space-between;">
+            <div class="name" title="${it.id}">${it.id}</div>
+            <div class="handle" data-handle="1" title="Giữ để kéo">⠿ Drag</div>
+          </div>
+          <div class="pill">${typeLabel(it.type)} · ${it.id}</div>
+        `;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const openBtn = document.createElement("a");
+        openBtn.className = "btn";
+        openBtn.textContent = "🔗 Open";
+        openBtn.href = (it.medias[0]?.url || "#");
+        openBtn.target = "_blank";
+        openBtn.rel = "noreferrer";
+        actions.appendChild(openBtn);
+
+        // LIVE preview toggle (chỉ LIVE)
+        if (it.type === TYPE.LIVE) {
+          const hasPreview = !!it._hasPreview;
+          const defaultChecked = hasPreview ? (st.liveUsePreview[it.id] ?? true) : false;
+
+          const lb = document.createElement("label");
+          lb.className = "mut";
+          lb.title = "Tick: medias[1].thumbUrl dùng _preview.webp. Bỏ tick: thumbUrl = \"\"";
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.disabled = !hasPreview;
+          cb.checked = defaultChecked;
+
+          cb.onchange = () => {
+            st.liveUsePreview[it.id] = cb.checked;
+
+            // update data ngay để generate
+            const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
+
+            // update thumb UI ngay
+            const thumbImg = row.querySelector(".thumb img");
+            if (thumbImg && imgMedia) {
+              thumbImg.src = (imgMedia.thumbUrl || imgMedia.url);
+            }
+          };
+
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(" use preview thumb"));
+          actions.appendChild(lb);
+
+          if (!hasPreview) {
+            const h = document.createElement("div");
+            h.className = "hint";
+            h.textContent = "LIVE này không có _preview.webp";
+            actions.appendChild(h);
+          }
+        }
+
+        meta.appendChild(actions);
+        row.appendChild(thumb);
+        row.appendChild(meta);
+        elList.appendChild(row);
+      }
+
+      // enable pointer-drag reorder
+      enablePointerSort(elList, catId);
+    }
+
+    /** ========= Pointer Sort (kéo chắc chắn được) ========= */
+    function enablePointerSort(container, catId){
+      // remove old listeners bằng cách clone? (đơn giản)
+      // nhưng tránh clone vì mất checkbox state. Ta chỉ gắn listener lên handle từng item.
+      const items = [...container.querySelectorAll(".item")];
+
+      let draggingEl = null;
+      let ghost = null;
+      let placeholder = null;
+      let startY = 0, startX = 0;
+      let offsetX = 0, offsetY = 0;
+
+      function cleanup(){
+        if (ghost) ghost.remove();
+        if (placeholder) placeholder.remove();
+        ghost = null;
+        placeholder = null;
+        draggingEl = null;
+        document.removeEventListener("pointermove", onMove, {passive:false});
+        document.removeEventListener("pointerup", onUp, {passive:false});
+        syncOrderFromDOM(catId);
+      }
+
+      function createGhostFrom(el){
+        const r = el.getBoundingClientRect();
+        const g = el.cloneNode(true);
+        g.classList.add("drag-ghost");
+        g.style.left = r.left + r.width/2 + "px";
+        g.style.top  = r.top + r.height/2 + "px";
+        g.style.width = r.width + "px";
+        // remove videos autoplay in ghost (optional)
+        g.querySelectorAll("video").forEach(v => { try { v.pause(); } catch{} });
+        document.body.appendChild(g);
+        return g;
+      }
+
+      function createPlaceholder(el){
+        const r = el.getBoundingClientRect();
+        const p = document.createElement("div");
+        p.className = "placeholder";
+        p.style.height = r.height + "px";
+        return p;
+      }
+
+      function getInsertBeforeElement(y){
+        const els = [...container.querySelectorAll(".item")].filter(x => x !== draggingEl);
+        let closest = null;
+        let closestOffset = -Infinity;
+        for (const el of els) {
+          const box = el.getBoundingClientRect();
+          const offset = y - (box.top + box.height/2);
+          if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closest = el;
+          }
+        }
+        return closest; // null => append end
+      }
+
+      function onMove(e){
+        e.preventDefault();
+        if (!ghost || !placeholder || !draggingEl) return;
+
+        const x = e.clientX - offsetX;
+        const y = e.clientY - offsetY;
+
+        ghost.style.left = (x + ghost.getBoundingClientRect().width/2) + "px";
+        ghost.style.top  = (y + ghost.getBoundingClientRect().height/2) + "px";
+
+        const beforeEl = getInsertBeforeElement(e.clientY);
+        if (beforeEl) container.insertBefore(placeholder, beforeEl);
+        else container.appendChild(placeholder);
+      }
+
+      function onUp(e){
+        e.preventDefault();
+        if (!draggingEl || !placeholder) return cleanup();
+
+        container.insertBefore(draggingEl, placeholder);
+        cleanup();
+      }
+
+      for (const it of items) {
+        const handle = it.querySelector("[data-handle='1']");
+        if (!handle) continue;
+
+        handle.onpointerdown = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handle.setPointerCapture(e.pointerId);
+
+          draggingEl = it;
+          const rect = it.getBoundingClientRect();
+
+          ghost = createGhostFrom(it);
+          placeholder = createPlaceholder(it);
+
+          // compute offsets so ghost follows pointer nicely
+          startX = e.clientX; startY = e.clientY;
+          offsetX = e.clientX - rect.left;
+          offsetY = e.clientY - rect.top;
+
+          // place placeholder where original item was
+          container.insertBefore(placeholder, it);
+          it.remove(); // remove original, we'll reinsert on drop
+
+          document.addEventListener("pointermove", onMove, {passive:false});
+          document.addEventListener("pointerup", onUp, {passive:false});
+        };
+      }
+    }
+
+    /** ========= loaders ========= */
+    async function loadFolders() {
+      setStatus("Loading folders... (requires token)");
+      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
+      allFolders = data
+        .filter(x => x.type === "dir")
+        .map(x => ({ name: x.name, path: x.path }))
+        .filter(x => /^\d+_/.test(x.name))
+        .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+      renderFolders();
+      setStatus("Ready. Click folder để sắp xếp.");
+    }
+
     async function listFolderFiles(folderName){
       const path = `${ROOT_DIR}/${folderName}`;
       const data = await fetchJson(ghContentsUrl(path), true);
@@ -731,75 +837,46 @@
       renderFolders();
 
       elTitle.textContent = `📁 ${folderName}`;
-      elSubtitle.textContent = `${RES_OWNER}/${RES_REPO}/${ROOT_DIR}/${folderName}`;
+      elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}/${folderName}`;
       setStatus("Loading files...");
 
-      // cache
+      let items;
       if (folderCache.has(folderName)) {
-        const cached = folderCache.get(folderName);
-        setStatus(`Loaded from cache (${cached.items.length} items).`);
-        const st = ensureCategoryState(folderName);
-        // apply preview toggle state to items
-        for (const it of cached.items) {
-          if (it.type === TYPE.LIVE) {
-            const use = (st.liveUsePreview[it.idBase] ?? true);
-            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
-            if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
-          }
-        }
-        const ordered = applyOrder(folderName, cached.items);
-        renderItems(folderName, ordered);
-        return;
+        items = folderCache.get(folderName).items;
+      } else {
+        const files = await listFolderFiles(folderName);
+        items = buildItemsFromFiles(folderName, files);
+        folderCache.set(folderName, { files, items });
       }
-
-      const files = await listFolderFiles(folderName);
-      const items = buildItemsFromFiles(folderName, files, Math.floor(Date.now()/1000));
 
       // apply saved live preview choice
       const st = ensureCategoryState(folderName);
       for (const it of items) {
         if (it.type === TYPE.LIVE) {
-          const use = (st.liveUsePreview[it.idBase] ?? true);
-          const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
-          if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+          const use = (st.liveUsePreview[it.id] ?? true);
+          const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+          if (imgMedia) imgMedia.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+          it._thumb = (imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb);
         }
       }
 
-      folderCache.set(folderName, { files, items, updatedAt: Date.now() });
-
+      // apply order list
       const ordered = applyOrder(folderName, items);
       setStatus(`Loaded ${items.length} items.`);
       renderItems(folderName, ordered);
     }
 
-    /** ========= upload/load orders.json ========= */
+    /** ========= orders.json upload ========= */
     async function uploadOrdersJson(){
       saveOrdersLocal();
       setStatus(`Uploading ${ORDERS_PATH} ...`);
       const txt = JSON.stringify(ordersState, null, 2);
       await upsertTextFile(ORDERS_PATH, txt, `Update orders (${ordersState.updatedAt})`);
-      setStatus(`✅ Uploaded ${ORDERS_PATH}\nURL:\nhttps://tramiune.github.io/${RES_REPO}/${ORDERS_PATH}`);
+      setStatus(`✅ Uploaded ${ORDERS_PATH}`);
       alert("Upload orders.json xong ✅");
     }
 
-    async function tryLoadOrdersFromGitHub(){
-      setStatus(`Loading ${ORDERS_PATH} ...`);
-      try {
-        const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
-        // contents API returns base64 content (when file is small)
-        const content = meta?.content || "";
-        const raw = decodeURIComponent(escape(atob(content.replace(/\n/g,""))));
-        const obj = JSON.parse(raw);
-        ordersState = obj;
-        saveOrdersLocal();
-        setStatus(`✅ Loaded orders from GitHub\nupdatedAt=${ordersState.updatedAt || 0}`);
-        alert("Load orders.json từ GitHub xong ✅");
-      } catch (e) {
-        setStatus(`Không load được orders từ GitHub (có thể chưa tạo file)\n${e.message || e}`);
-      }
-    }
-
-    /** ========= generate ordered JSON all ========= */
+    /** ========= Generate JSON ALL (like browser) ========= */
     function uniqId(desired, used){
       if (!used.has(desired)) { used.add(desired); return desired; }
       let i=2;
@@ -809,78 +886,78 @@
       return out;
     }
 
-    async function generateAllOrdered(){
+    async function generateAllLikeBrowser(){
       const ok = confirm(
-        `Generate JSON (ALL, ordered) + upload?\n\n`+
-        `orders: ${ORDERS_PATH}\noutput: ${OUTPUT_ALL_JSON}\n\n`+
-        `⚠️ overwrite file cũ`
+        `Generate JSON ALL (like browser) + upload?\n\nOutput: ${OUTPUT_ALL_JSON}\n\n⚠️ overwrite file cũ`
       );
       if (!ok) return;
 
       setStatus("Generating ALL...");
 
-      const usedIds = new Set();
-      const all = [];
-      let ts = Math.floor(Date.now()/1000);
+      // ensure current folder order sync before gen
+      if (activeFolder) syncOrderFromDOM(activeFolder);
 
-      // ensure folders loaded
+      const used = new Set();
+      const out = [];
+      let createdAt = Math.floor(Date.now()/1000);
+
       if (!allFolders.length) await loadFolders();
 
       for (const f of allFolders) {
         const folderName = f.name;
-        setStatus(`Building: ${folderName} ...`);
+        setStatus(`Build: ${folderName} ...`);
 
-        // load (use cache if possible)
         let items;
         if (folderCache.has(folderName)) {
           items = folderCache.get(folderName).items;
         } else {
           const files = await listFolderFiles(folderName);
-          items = buildItemsFromFiles(folderName, files, ts);
-          folderCache.set(folderName, { files, items, updatedAt: Date.now() });
+          items = buildItemsFromFiles(folderName, files);
+          folderCache.set(folderName, { files, items });
         }
 
-        // apply preview choices
+        // apply order and live preview toggle (the “orders” rule)
         const st = ensureCategoryState(folderName);
+
         for (const it of items) {
           if (it.type === TYPE.LIVE) {
-            const use = (st.liveUsePreview[it.idBase] ?? true);
-            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
-            if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+            const use = (st.liveUsePreview[it.id] ?? true);
+            const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (imgMedia) imgMedia.thumbUrl = use ? (it._livePreviewUrl || "") : "";
           }
         }
 
-        // apply order array
         const ordered = applyOrder(folderName, items);
 
-        // push output (ensure unique id)
         for (const it of ordered) {
-          const id = uniqId(it.idBase, usedIds);
-          const out = {
+          const id = uniqId(it.id, used);
+
+          // IMPORTANT: export đúng format browser
+          const exportItem = {
             id,
             medias: it.medias.map(m => {
               const mm = { ...m };
-              if (mm.hour == null) delete mm.hour;
+              // giữ hour nếu có (DAYS)
               return mm;
             }),
             categoryId: it.categoryId,
-            isPremium: it.isPremium,
-            createdAt: it.createdAt,
-            subType: it.subType,
+            isPremium: true,
+            createdAt: createdAt++,
+            subType: 0,
             type: it.type,
-            coinToUnlock: it.coinToUnlock
+            coinToUnlock: 0
           };
-          all.push(out);
-          ts = Math.max(ts, it.createdAt + 1);
+
+          out.push(exportItem);
         }
       }
 
-      const jsonText = JSON.stringify(all, null, 2);
-      setStatus(`Uploading ${OUTPUT_ALL_JSON} ...\nItems: ${all.length}`);
-      await upsertTextFile(OUTPUT_ALL_JSON, jsonText, `Generate wallpaper.json ordered (${all.length})`);
+      const jsonText = JSON.stringify(out, null, 2);
 
-      setStatus(`✅ Done\nUploaded: ${OUTPUT_ALL_JSON}\nItems: ${all.length}\nURL:\nhttps://tramiune.github.io/${RES_REPO}/${OUTPUT_ALL_JSON}`);
-      alert("Generate JSON ordered xong ✅");
+      setStatus(`Uploading ${OUTPUT_ALL_JSON} ...\nItems: ${out.length}`);
+      await upsertTextFile(OUTPUT_ALL_JSON, jsonText, `Generate wallpaper.json (${out.length})`);
+      setStatus(`✅ Done\nUploaded: ${OUTPUT_ALL_JSON}\nItems: ${out.length}`);
+      alert("Generate JSON xong ✅");
     }
 
     /** ========= events ========= */
@@ -890,6 +967,7 @@
       if (!st) return alert("Chưa có orders trong localStorage");
       ordersState = st;
       alert("Loaded orders local ✅");
+
       if (activeFolder && folderCache.has(activeFolder)) {
         const items = folderCache.get(activeFolder).items;
         const ordered = applyOrder(activeFolder, items);
@@ -904,7 +982,7 @@
       });
     };
     document.getElementById("genAll").onclick = () => {
-      generateAllOrdered().catch(err => {
+      generateAllLikeBrowser().catch(err => {
         console.error(err);
         alert(String(err?.message || err));
         setStatus(String(err?.message || err));
@@ -921,16 +999,10 @@
     });
 
     /** boot */
-    (async function boot(){
-      // try load orders local first
+    (function boot(){
       const st = loadOrdersLocal();
       if (st) ordersState = st;
-
-      // optional: nếu muốn auto load orders.json từ GitHub thì bật dòng dưới
-      // await tryLoadOrdersFromGitHub();
-
-      await loadFolders();
-      setStatus("Ready. Chọn folder để kéo thả sắp xếp.");
+      loadFolders().catch(err => setStatus(String(err?.message || err)));
     })();
 </script>
 </body>
