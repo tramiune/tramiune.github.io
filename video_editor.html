@@ -51,7 +51,6 @@
     <div class="card">
         <div class="hd">Preview video</div>
         <div class="ct">
-            <!-- CORS: crossorigin must be on element -->
             <video id="v" controls playsinline crossorigin="anonymous"></video>
 
             <div class="row" style="margin-top:10px">
@@ -91,7 +90,7 @@
 
             <hr/>
 
-            <div class="mut">Trim video:</div>
+            <div class="mut">Trim video (GIỮ ÂM THANH):</div>
             <label>
                 <span>Trim start (sec)</span>
                 <input id="start" type="number" min="0" step="0.1" value="0"/>
@@ -114,7 +113,7 @@
             </div>
 
             <div class="warn" style="margin-top:10px">
-                <b>Trim & Replace MP4</b> dùng FFmpeg wasm (lần đầu load có thể hơi lâu).<br/>
+                <b>Trim & Replace MP4</b> dùng FFmpeg WASM <b>single-thread</b> (không cần SharedArrayBuffer).<br/>
                 FAST = nhanh (có thể lệch chút nếu không trúng keyframe). PRECISE = chuẩn hơn nhưng chậm.
             </div>
 
@@ -123,15 +122,13 @@
     </div>
 </main>
 
-<!-- FFmpeg wasm -->
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"></script>
-
+<!-- ✅ FFmpeg single-thread (không cần SharedArrayBuffer) -->
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js"></script>
 <script>
     /** Repo config */
     const OWNER = "tramiune";
     const REPO  = "tramiune001_res_wallpaper";
-    const BRANCH = "main";          // đổi nếu repo bạn là master
+    const BRANCH = "main";
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
@@ -162,7 +159,6 @@
       corsNote.style.display = "block";
       corsNote.textContent = s;
     }
-
     function qs() {
       const p = new URLSearchParams(location.search);
       return {
@@ -172,7 +168,6 @@
         target: p.get("target") || ""
       };
     }
-
     function mediaUrlCdn(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
     function baseName(file){
       const i = file.lastIndexOf(".");
@@ -186,14 +181,12 @@
       a.click();
       setTimeout(()=>URL.revokeObjectURL(url), 5000);
     }
-
     function drawFrameToCanvas(){
       if (!v.videoWidth || !v.videoHeight) return;
       c.width = v.videoWidth;
       c.height = v.videoHeight;
       ctx.drawImage(v, 0, 0, c.width, c.height);
     }
-
     async function seekTo(time){
       const t = Math.max(0, Math.min(time, v.duration || 0));
       v.pause();
@@ -202,7 +195,6 @@
       drawFrameToCanvas();
       updateUI();
     }
-
     function updateUI(){
       const ct = v.currentTime || 0;
       tEl.textContent = ct.toFixed(3);
@@ -210,20 +202,15 @@
       scrub.value = String(ct);
     }
 
-    /** ---------- token share with browser ---------- */
+    /** token localStorage share */
     const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
     (function initRememberToken(){
       const saved = localStorage.getItem(LS_KEY);
-      if (saved) {
-        tokenEl.value = saved;
-        rememberEl.checked = true;
-      }
+      if (saved) { tokenEl.value = saved; rememberEl.checked = true; }
       rememberEl.addEventListener("change", () => {
         if (rememberEl.checked) {
           if (tokenEl.value.trim()) localStorage.setItem(LS_KEY, tokenEl.value.trim());
-        } else {
-          localStorage.removeItem(LS_KEY);
-        }
+        } else localStorage.removeItem(LS_KEY);
       });
       tokenEl.addEventListener("input", () => {
         if (rememberEl.checked) localStorage.setItem(LS_KEY, tokenEl.value.trim());
@@ -280,36 +267,29 @@
       return String(dataUrl).split(",")[1];
     }
 
-    /** ✅ Replace target webp on GitHub */
+    /** Replace target webp on GitHub */
     async function replaceWebpOnGitHub(folder, targetFileName, webpBlob) {
       const token = getAuthToken();
       const filePath = `${ROOT_DIR}/${folder}/${targetFileName}`;
-
       setStatus(`Uploading...\n→ ${filePath}`);
-
       const sha = await getFileSha(filePath, token);
       const content = await blobToBase64NoPrefix(webpBlob);
-
       await ghPutJson(
         `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`,
         token,
         { message: `Update ${filePath}`, content, sha, branch: BRANCH }
       );
-
       setStatus(`✅ Replaced on GitHub\n${filePath}`);
     }
 
-    /** ✅ Load video as Blob via GitHub API (no CORS/taint) */
+    /** Load video as Blob via GitHub API (no CORS/taint) */
     async function loadVideoViaGitHubApi(folder, fileName) {
       const token = getAuthToken();
       const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
       const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
-
       setStatus(`Fetching video via GitHub API...\n${filePath}`);
-
       const meta = await ghGetJson(url, token);
       if (!meta?.download_url) throw new Error("Không có download_url (file private?)");
-
       const res = await fetch(meta.download_url);
       if (!res.ok) {
         const txt = await res.text().catch(()=> "");
@@ -317,12 +297,11 @@
       }
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-
       setStatus("");
       return blobUrl;
     }
 
-    /** ---------- UI actions ---------- */
+    /** UI actions */
     speedEl.addEventListener("input", ()=> speedVal.textContent = `${Number(speedEl.value).toFixed(1)}x`);
     document.getElementById("apply").onclick = ()=> { v.playbackRate = Number(speedEl.value) || 1; };
 
@@ -347,17 +326,15 @@
         const blob = await canvasToWebpBlob(0.92);
         downloadBlob(blob, out);
         setStatus(`✅ Saved\n${out}`);
-      } catch (e) {
-        alert(String(e?.message || e));
-      }
+      } catch (e) { alert(String(e?.message || e)); }
     };
 
     document.getElementById("downloadPreview").onclick = async () => {
       try {
         const { video } = qs();
         const out = `${baseName(video)}_preview.webp`;
-
         drawFrameToCanvas();
+
         const targetW = 360;
         const scale = targetW / c.width;
         const w = Math.max(1, Math.round(c.width * scale));
@@ -372,9 +349,7 @@
         if (!blob) throw new Error("toBlob failed (webp not supported?)");
         downloadBlob(blob, out);
         setStatus(`✅ Saved\n${out}`);
-      } catch (e) {
-        alert(String(e?.message || e));
-      }
+      } catch (e) { alert(String(e?.message || e)); }
     };
 
     document.getElementById("replaceWebp").onclick = async () => {
@@ -382,20 +357,15 @@
         const { mode, folder, target } = qs();
         if (mode !== "replaceImage") throw new Error("Replace chỉ dùng khi mở từ nút Update (mode=replaceImage).");
         if (!folder || !target) throw new Error("Thiếu folder/target.");
-
         const blob = await canvasToWebpBlob(0.92);
         await replaceWebpOnGitHub(folder, target, blob);
-
         try { window.opener?.location?.reload?.(); } catch {}
-      } catch (e) {
-        alert(String(e?.message || e));
-      }
+      } catch (e) { alert(String(e?.message || e)); }
     };
 
-    /** ---------- Export trimmed (WEBM lite) ---------- */
+    /** Export trimmed (WEBM lite) */
     async function exportTrimWebmLite(){
       const { video } = qs();
-
       const start = Math.max(0, Number(startEl.value) || 0);
       const endIn = Math.max(0, Number(endEl.value) || 0);
       const rate = Number(speedEl.value) || 1;
@@ -406,7 +376,7 @@
 
       const out = `${baseName(video)}_trim_${start.toFixed(1)}_${end.toFixed(1)}.webm`;
 
-      setStatus(`Exporting trim (lite)...\nstart=${start}s end=${end}s speed=${rate}x\n→ ${out}\n\nNote: output webm, no-audio (lite mode)`);
+      setStatus(`Exporting trim (lite)...\nstart=${start}s end=${end}s speed=${rate}x\n→ ${out}\n\nNote: output webm (lite)`);
 
       drawFrameToCanvas();
       const stream = c.captureStream(30);
@@ -424,19 +394,13 @@
       v.pause();
       v.currentTime = start;
       v.playbackRate = rate;
-      v.muted = true;
 
       await new Promise(resolve => v.addEventListener("seeked", resolve, { once:true }));
-
       await v.play();
       rec.start(500);
       drawLoop();
 
-      const stopAll = async () => {
-        cancelAnimationFrame(rafId);
-        rec.stop();
-        v.pause();
-      };
+      const stopAll = async () => { cancelAnimationFrame(rafId); rec.stop(); v.pause(); };
 
       const tick = () => {
         if ((v.currentTime || 0) >= end) stopAll();
@@ -458,22 +422,23 @@
     };
 
     /** =========================
-     *  FFmpeg wasm: Trim MP4 & Replace on GitHub
+     *  FFmpeg single-thread: Trim MP4 & Replace (GIỮ AUDIO)
      *  ========================= */
     let _ffmpeg = null;
 
     async function ensureFFmpegLoaded() {
       if (_ffmpeg) return _ffmpeg;
       if (!window.FFmpeg || !window.FFmpeg.createFFmpeg) {
-        throw new Error("FFmpeg wasm chưa load (check script @ffmpeg/ffmpeg).");
+        throw new Error("FFmpeg wasm chưa load.");
       }
       const { createFFmpeg, fetchFile } = window.FFmpeg;
       const ffmpeg = createFFmpeg({
         log: true,
-        corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"
+        // corePath cho 0.10.x
+        corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js"
       });
 
-      setStatus("Loading FFmpeg (first time only)...\nCó thể mất 10-30s tuỳ mạng.");
+      setStatus("Loading FFmpeg (first time only)...\nKhông cần SharedArrayBuffer (single-thread).");
       await ffmpeg.load();
       setStatus("");
 
@@ -516,9 +481,10 @@
       setStatus(`FFmpeg: writing input...\nsize=${Math.round(inputMp4Blob.size/1024/1024)}MB`);
       ffmpeg.FS("writeFile", inName, await fetchFile(inputMp4Blob));
 
-      setStatus(`FFmpeg: trimming...\nstart=${start}s end=${end}s mode=${mode}`);
+      setStatus(`FFmpeg: trimming...\nstart=${start}s end=${end}s mode=${mode}\n(giữ audio)`);
 
       if (mode === "FAST") {
+        // Giữ audio/video nguyên (copy)
         await ffmpeg.run(
           "-ss", String(start),
           "-to", String(end),
@@ -527,17 +493,35 @@
           outName
         );
       } else {
-        await ffmpeg.run(
-          "-ss", String(start),
-          "-to", String(end),
-          "-i", inName,
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-crf", "23",
-          "-movflags", "+faststart",
-          "-an",
-          outName
-        );
+        // PRECISE: re-encode video cho chuẩn, cố gắng copy audio
+        // Nếu audio copy fail (tuỳ codec), sẽ fallback AAC
+        try {
+          await ffmpeg.run(
+            "-ss", String(start),
+            "-to", String(end),
+            "-i", inName,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            outName
+          );
+        } catch (e) {
+          // fallback encode audio aac
+          await ffmpeg.run(
+            "-ss", String(start),
+            "-to", String(end),
+            "-i", inName,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "23",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "+faststart",
+            outName
+          );
+        }
       }
 
       const data = ffmpeg.FS("readFile", outName);
@@ -549,8 +533,8 @@
     async function replaceVideoOnGitHub(folder, fileName, mp4Blob) {
       const token = getAuthToken();
       const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
-      setStatus(`Uploading trimmed mp4...\n→ ${filePath}`);
 
+      setStatus(`Uploading trimmed mp4...\n→ ${filePath}`);
       const sha = await getFileSha(filePath, token);
       const content = await blobToBase64NoPrefix(mp4Blob);
 
@@ -568,26 +552,19 @@
         const { folder, video } = qs();
         if (!folder || !video) throw new Error("Thiếu folder/video.");
 
-        // validate times
         const start = Math.max(0, Number(startEl.value) || 0);
         const endIn = Math.max(0, Number(endEl.value) || 0);
         if (!v.duration || Number.isNaN(v.duration)) throw new Error("Video chưa load xong.");
         const end = (endIn <= 0 || endIn > v.duration) ? v.duration : endIn;
         if (end <= start) throw new Error("Trim end phải > trim start.");
 
-        // pick mode
-        const mode = confirm("OK = FAST (nhanh)\nCancel = PRECISE (chính xác hơn, chậm)") ? "FAST" : "PRECISE";
+        const mode = confirm("OK = FAST (nhanh, copy stream)\nCancel = PRECISE (chuẩn hơn, re-encode video)") ? "FAST" : "PRECISE";
 
-        // 1) fetch source mp4
         const srcBlob = await fetchVideoBlobForTrim(folder, video);
-
-        // 2) trim mp4
         const outBlob = await trimMp4BlobWithFFmpeg(srcBlob, start, end, mode);
-
-        // 3) replace to GitHub (same mp4 name)
         await replaceVideoOnGitHub(folder, video, outBlob);
 
-        // 4) reload preview locally with trimmed blob
+        // reload preview ngay trong editor
         try {
           const blobUrl = URL.createObjectURL(outBlob);
           v.pause();
@@ -601,7 +578,7 @@
       }
     };
 
-    /** ---------- init ---------- */
+    /** init */
     (async function init(){
       const { mode, folder, video, target } = qs();
       if (!folder || !video) {
@@ -616,9 +593,6 @@
       // MUST set crossOrigin before src
       v.crossOrigin = "anonymous";
 
-      // Strategy:
-      // - replaceImage: luôn dùng GitHub API blob (đảm bảo canvas OK)
-      // - edit: nếu có token thì dùng API blob cho chắc; không có token thì dùng CDN (xem nhanh)
       try {
         let src;
         if (mode === "replaceImage") {
@@ -627,10 +601,10 @@
         } else {
           const hasToken = !!(tokenEl.value || "").trim();
           if (hasToken) {
-            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame/trim.");
+            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame/trim&replace.");
             src = await loadVideoViaGitHubApi(folder, video);
           } else {
-            setWarn("Không có token: dùng CDN. Nếu export frame bị lỗi 'Tainted canvas' hoặc muốn Trim&Replace, hãy nhập token.");
+            setWarn("Không có token: dùng CDN để xem nhanh. Nếu export/trim&replace cần token.");
             src = mediaUrlCdn(folder, video);
           }
         }
