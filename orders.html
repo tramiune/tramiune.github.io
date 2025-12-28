@@ -3,27 +3,34 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Orders (Wallpaper)</title>
+    <title>Orders • Wallpaper</title>
     <style>
         :root { --bd:#e7e7e7; --mut:#666; }
-        body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-        header { padding:12px 14px; border-bottom:1px solid var(--bd); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#fff; }
+        header {
+          padding:12px 14px; border-bottom:1px solid var(--bd);
+          display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+        }
         header b { font-size:14px; }
-        header .mut { color:var(--mut); font-size:12px; }
-        header input[type="text"], header input[type="password"], header input[type="number"]{
+        .mut { color:var(--mut); font-size:12px; }
+        input[type="text"], input[type="password"]{
           padding:8px 10px; border:1px solid var(--bd); border-radius:10px; min-width:220px;
         }
-        header button, header a.btn {
+        button, a.btn{
           padding:8px 10px; border:1px solid var(--bd); background:#fff; border-radius:10px; cursor:pointer;
           text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
         }
-        header button:hover, header a.btn:hover { background:#f5f5f5; }
+        button:hover, a.btn:hover { background:#f5f5f5; }
+        .danger { border-color:#f0c1c1 !important; }
         label.mut { display:inline-flex; gap:6px; align-items:center; }
         input[type="checkbox"] { transform: translateY(1px); }
 
-        .wrap { display:grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 64px); }
+        .wrap { display:grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 64px); }
         aside { border-right:1px solid var(--bd); padding:10px; overflow:auto; }
         main { padding:12px; overflow:auto; }
+
+        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .status { font-size:12px; color:var(--mut); white-space:pre-wrap; margin: 8px 0 10px; }
 
         .folder {
           padding:9px 10px; border:1px solid var(--bd); border-radius:12px; cursor:pointer;
@@ -31,41 +38,52 @@
         }
         .folder:hover { background:#f7f7f7; }
         .folder.active { border-color:#bbb; background:#f5f5f5; }
-
         .small { font-size:12px; color:var(--mut); }
-        .status { font-size:12px; color:var(--mut); white-space:pre-wrap; margin: 6px 0 10px; }
 
-        .list { display:flex; flex-direction:column; gap:8px; }
+        .list { display:flex; flex-direction:column; gap:10px; }
         .item {
-          border:1px solid var(--bd); border-radius:14px; background:#fff;
-          padding:10px; display:flex; gap:10px; align-items:flex-start;
+          border:1px solid var(--bd); border-radius:14px; overflow:hidden; background:#fff;
+          display:grid; grid-template-columns: 120px 1fr; gap:10px;
         }
-        .handle { cursor:grab; user-select:none; padding:2px 8px; border:1px solid var(--bd); border-radius:10px; }
-        .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; }
-        .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-        .col { display:flex; flex-direction:column; gap:6px; flex:1; min-width:240px; }
-        code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; }
+        .thumb {
+          width:120px; aspect-ratio: 9/16; background:#f2f2f2; display:flex; align-items:center; justify-content:center;
+          overflow:hidden;
+        }
+        .thumb img, .thumb video { width:100%; height:100%; object-fit:cover; display:block; }
+        .meta { padding:10px 10px 10px 0; }
+        .name { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; margin-top:6px; }
+        .handle { cursor:grab; user-select:none; padding:6px 8px; border:1px dashed #ddd; border-radius:10px; display:inline-flex; gap:6px; align-items:center; }
+        .handle:active { cursor:grabbing; }
+        .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+        .hint { font-size:12px; color:var(--mut); margin-top:6px; }
+
+        .dropHint {
+          border:1px dashed #bbb; border-radius:14px; padding:12px; text-align:center; color:var(--mut);
+          display:none;
+        }
+        .item.dragging { opacity:0.55; }
     </style>
 </head>
 <body>
+
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả để sắp xếp · LIVE có checkbox chọn preview trong JSON</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · có thumbnail · LIVE tick preview</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
-    <input id="token" type="password" placeholder="GitHub Token (Contents: read)" style="min-width:260px" />
-    <label class="mut" title="Lưu token trên máy bạn (localStorage)">
-        <input id="remember" type="checkbox" />
+    <input id="token" type="password" placeholder="GitHub Token (write)" style="min-width:260px" />
+    <label class="mut" title="Lưu token localStorage">
+        <input id="rememberToken" type="checkbox" />
         remember token
     </label>
 
-    <button id="reload">Reload</button>
-    <button id="save">💾 Save (localStorage)</button>
-    <button id="resetOrder">↩️ Reset order by number</button>
+    <button id="saveLocal">Save orders (local)</button>
+    <button id="loadLocal">Load orders (local)</button>
+    <button id="uploadOrders">Upload dev/orders.json</button>
 
-    <a class="btn" href="./browser.html" target="_blank" rel="noreferrer">⬅️ Back browser</a>
-
+    <button id="genAll">Generate JSON (ALL, ordered)</button>
     <span class="mut" id="rate"></span>
 </header>
 
@@ -87,14 +105,8 @@
             <div class="small" id="itemCount"></div>
         </div>
 
-        <div class="row" style="margin-bottom:10px;">
-            <label class="mut">baseCreatedAt:
-                <input id="baseCreatedAt" type="number" min="0" step="1" style="min-width:180px" />
-            </label>
-            <span class="small">createdAt trong JSON = baseCreatedAt + index theo order</span>
-        </div>
-
         <div class="status" id="status"></div>
+        <div class="dropHint" id="dropHint">Thả để đổi vị trí</div>
         <div class="list" id="list"></div>
     </main>
 </div>
@@ -103,13 +115,20 @@
     /** =========================
      *  CONFIG
      *  ========================= */
-    const OWNER = "tramiune";
-    const REPO  = "tramiune001_res_wallpaper";
-    const BRANCH = "main";
+    const RES_OWNER = "tramiune";
+    const RES_REPO  = "tramiune001_res_wallpaper";
+    const RES_BRANCH = "main";
     const ROOT_DIR = "resources";
+
+    const CDN_BASE = `https://cdn.jsdelivr.net/gh/${RES_OWNER}/${RES_REPO}/${ROOT_DIR}/`;
+
+    const OUTPUT_ALL_JSON = "dev/wallpaper.json";
+    const ORDERS_PATH = "dev/orders.json";
 
     const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
     const VIDEO_EXT = ["mp4","webm","mov"];
+
+    const TYPE = { LIVE:0, STILL:1, DOUBLE:2, DAYS:3, COUPLE:4 };
     /** ========================= */
 
     const elFolders = document.getElementById("folders");
@@ -122,201 +141,575 @@
     const elQ = document.getElementById("q");
     const elRate = document.getElementById("rate");
     const elToken = document.getElementById("token");
-    const elRemember = document.getElementById("remember");
-    const elBaseCreatedAt = document.getElementById("baseCreatedAt");
+    const elRememberToken = document.getElementById("rememberToken");
+    const elDropHint = document.getElementById("dropHint");
 
-    let allFolders = [];
+    let allFolders = [];          // [{name,path}]
     let activeFolder = null;
-    let activeFiles = [];
+    let folderCache = new Map();  // folderName -> { files:[name], items:[item], updatedAt }
+    let ordersState = {
+      version: 1,
+      updatedAt: 0,
+      categories: {
+        // [categoryId]: { order:[ids], liveUsePreview:{[id]:boolean} }
+      }
+    };
 
-    function setStatus(s) { elStatus.textContent = s || ""; }
-
-    function extOf(name) {
-      const i = name.lastIndexOf(".");
-      return i >= 0 ? name.slice(i+1).toLowerCase() : "";
+    /** ========= utils ========= */
+    function setStatus(s){ elStatus.textContent = s || ""; }
+    function extOf(name){ const i=name.lastIndexOf("."); return i>=0?name.slice(i+1).toLowerCase():""; }
+    function isPreviewName(name){ return name.includes("_preview."); }
+    function pad3(n){ return String(n).padStart(3,"0"); }
+    function encodePath(path){ return path.split("/").map(encodeURIComponent).join("/"); }
+    function cdnUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
+    function folderDefaultPrefix(folderName){ return folderName.replace(/^\d+_/, ""); }
+    function contentTypeFromExt(name){
+      const e=extOf(name);
+      if (e==="webp") return "image/webp";
+      if (e==="png") return "image/png";
+      if (e==="jpg"||e==="jpeg") return "image/jpeg";
+      if (e==="gif") return "image/gif";
+      if (e==="mp4") return "video/mp4";
+      if (e==="webm") return "video/webm";
+      if (e==="mov") return "video/quicktime";
+      return "application/octet-stream";
     }
-    function isMediaFile(name) {
-      const e = extOf(name);
-      return IMAGE_EXT.includes(e) || VIDEO_EXT.includes(e);
-    }
+    function hourToHHMM(h){ const hh=String(h).padStart(2,"0"); return `${hh}:00`; }
 
-    function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
-    function ghContentsUrl(path) {
-      const p = encodePath(path);
-      return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
-    }
-
-    function getAuthToken() {
+    function getAuthToken(){
       const t = elToken.value.trim();
-      if (!t) throw new Error("Bạn chưa nhập GitHub token.");
+      if (!t) throw new Error("Bạn chưa nhập GitHub token (write).");
       return t;
     }
-
-    async function fetchJson(url, withAuth = false) {
-      const headers = { "Accept": "application/vnd.github+json" };
-      if (withAuth && elToken.value.trim()) headers["Authorization"] = `Bearer ${getAuthToken()}`;
-
+    async function fetchJson(url, withAuth=false){
+      const headers = { "Accept":"application/vnd.github+json" };
+      if (withAuth) headers["Authorization"] = `Bearer ${getAuthToken()}`;
       const res = await fetch(url, { headers });
       const limit = res.headers.get("x-ratelimit-limit");
       const remain = res.headers.get("x-ratelimit-remaining");
       if (limit && remain) elRate.textContent = `GitHub API rate: ${remain}/${limit}`;
-
       if (!res.ok) {
         const txt = await res.text().catch(()=> "");
         throw new Error(`HTTP ${res.status}\n${txt}`);
       }
       return res.json();
     }
+    function ghContentsUrl(path){
+      return `https://api.github.com/repos/${RES_OWNER}/${RES_REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(RES_BRANCH)}`;
+    }
 
-    /** remember token */
-    const LS_TOKEN = `wallpaper_orders_token_${OWNER}_${REPO}`;
-    (function initRememberToken(){
+    /** ========= token localStorage ========= */
+    const LS_TOKEN = `orders_token_${RES_OWNER}_${RES_REPO}`;
+    (function initToken(){
       const saved = localStorage.getItem(LS_TOKEN);
-      if (saved) {
-        elToken.value = saved;
-        elRemember.checked = true;
-      }
-      elRemember.addEventListener("change", () => {
-        if (elRemember.checked) {
+      if (saved) { elToken.value = saved; elRememberToken.checked = true; }
+      elRememberToken.addEventListener("change", () => {
+        if (elRememberToken.checked) {
           if (elToken.value.trim()) localStorage.setItem(LS_TOKEN, elToken.value.trim());
         } else {
           localStorage.removeItem(LS_TOKEN);
         }
       });
       elToken.addEventListener("input", () => {
-        if (elRemember.checked) localStorage.setItem(LS_TOKEN, elToken.value.trim());
+        if (elRememberToken.checked) localStorage.setItem(LS_TOKEN, elToken.value.trim());
       });
     })();
 
-    /** Orders config storage shared with browser.html */
-    const LS_ORDERS = `wallpaper_orders_${OWNER}_${REPO}`;
-    function loadOrdersConfig() {
+    /** ========= orders localStorage ========= */
+    const LS_ORDERS = `orders_state_${RES_OWNER}_${RES_REPO}`;
+    function saveOrdersLocal(){
+      ordersState.updatedAt = Math.floor(Date.now()/1000);
+      localStorage.setItem(LS_ORDERS, JSON.stringify(ordersState));
+    }
+    function loadOrdersLocal(){
+      const raw = localStorage.getItem(LS_ORDERS);
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    }
+
+    /** ========= Git upsert small text file (orders.json / wallpaper.json) ========= */
+    async function upsertTextFile(path, text, message) {
+      const token = getAuthToken();
+      const apiUrl = `https://api.github.com/repos/${RES_OWNER}/${RES_REPO}/contents/${encodePath(path)}`;
+
+      // check sha if exists
+      let sha = null;
       try {
-        const raw = localStorage.getItem(LS_ORDERS);
-        if (!raw) return {};
-        const obj = JSON.parse(raw);
-        return obj && typeof obj === "object" ? obj : {};
-      } catch {
-        return {};
+        const meta = await fetchJson(apiUrl + `?ref=${encodeURIComponent(RES_BRANCH)}`, true);
+        sha = meta?.sha || null;
+      } catch { sha = null; }
+
+      const contentB64 = btoa(unescape(encodeURIComponent(text)));
+
+      const body = { message, content: contentB64, branch: RES_BRANCH };
+      if (sha) body.sha = sha;
+
+      const res = await fetch(apiUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`Upsert failed: HTTP ${res.status}\n${txt}`);
       }
     }
-    function saveOrdersConfig(obj) {
-      localStorage.setItem(LS_ORDERS, JSON.stringify(obj, null, 2));
-    }
 
-    function isValidStillLiveBase(base) {
-      return /^.+?_\d{3}$/i.test(base);
-    }
+    /** ========= Build items from folder files (FIX gộp sai) ========= */
+    function buildItemsFromFiles(folderName, fileNames, baseCreatedAt) {
+      const defPrefix = folderDefaultPrefix(folderName);
 
-    /** detect items (id list + type) for a folder */
-    function detectItems(folderName, files) {
-      const fileSet = new Set(files.map(x => x.name));
+      const previewByKey = new Map(); // prefix|num -> preview file
+      const imageByKey = new Map();   // prefix|num -> still image
+      const mp4ByKey = new Map();     // prefix|num -> mp4 (non _noSound)
+      const doubleByNum = new Map();  // num -> {0,1}
+      const coupleByNum = new Map();  // num -> {single,0,1,preview}
+      const daysByNum = new Map();    // num -> Map(hour -> file)
 
-      const groups = new Map(); // id -> { id, type, n, isLive, hasPreview? }
-      const ensure = (id, init) => {
-        if (!groups.has(id)) groups.set(id, init);
-        return groups.get(id);
-      };
+      for (const name of fileNames) {
+        // preview
+        let m = name.match(/^(.*)_(\d{1,})_preview\.webp$/i);
+        if (m) {
+          const prefix = m[1];
+          const num = pad3(m[2]);
+          previewByKey.set(`${prefix}|${num}`, name);
+          if (prefix === "couple") {
+            const c = coupleByNum.get(num) || {};
+            c.preview = name;
+            coupleByNum.set(num, c);
+          }
+          continue;
+        }
 
-      // preview map (for LIVE decision)
-      const previewByBase = new Map();
-      for (const name of fileSet) {
-        if (!name.endsWith("_preview.webp")) continue;
-        const base = name.replace("_preview.webp", ".webp");
-        previewByBase.set(base, name);
+        // double
+        m = name.match(/^double_(\d{1,})_([01])\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const idx = m[2];
+          const obj = doubleByNum.get(num) || {};
+          obj[idx] = name;
+          doubleByNum.set(num, obj);
+          continue;
+        }
+
+        // couple pair
+        m = name.match(/^couple_(\d{1,})_([01])\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const idx = m[2];
+          const obj = coupleByNum.get(num) || {};
+          obj[idx] = name;
+          coupleByNum.set(num, obj);
+          continue;
+        }
+
+        // couple single
+        m = name.match(/^couple_(\d{1,})\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const obj = coupleByNum.get(num) || {};
+          obj.single = name;
+          coupleByNum.set(num, obj);
+          continue;
+        }
+
+        // days
+        m = name.match(/^days_(\d{1,})_(\d{1,2})h\.webp$/i);
+        if (m) {
+          const num = pad3(m[1]);
+          const hour = String(parseInt(m[2],10));
+          const hm = daysByNum.get(num) || new Map();
+          hm.set(hour, name);
+          daysByNum.set(num, hm);
+          continue;
+        }
+
+        // mp4
+        const e = extOf(name);
+        if (VIDEO_EXT.includes(e)) {
+          if (name.includes("_noSound.")) continue;
+          m = name.match(/^(.*)_(\d{1,})\.(mp4|webm|mov)$/i);
+          if (m) {
+            const prefix = m[1];
+            const num = pad3(m[2]);
+            mp4ByKey.set(`${prefix}|${num}`, name);
+          }
+          continue;
+        }
+
+        // still image normal
+        if (IMAGE_EXT.includes(e)) {
+          m = name.match(/^(.*)_(\d{1,})\.(webp|png|jpg|jpeg|gif)$/i);
+          if (m) {
+            const prefix = m[1];
+            const num = pad3(m[2]);
+            if (prefix === "days" || prefix === "double") continue;
+            if (prefix === "couple" && name.match(/^couple_\d{1,}_[01]\.webp$/i)) continue;
+            imageByKey.set(`${prefix}|${num}`, name);
+          }
+          continue;
+        }
       }
+
+      const items = [];
+      let ts = baseCreatedAt;
 
       // DOUBLE
-      for (const name of fileSet) {
-        const m = name.match(/^double_(\d{3})_(0|1)\.webp$/i);
-        if (!m) continue;
-        const n = parseInt(m[1], 10);
-        const id = `${folderName}_${m[1]}`;
-        ensure(id, { id, type: 2, n, isLive:false, hasPreview:false, parts: new Set() }).parts.add(m[2]);
+      for (const [num, obj] of [...doubleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+        if (!obj["0"] || !obj["1"]) continue;
+        items.push({
+          idBase: `${folderName}_double_${num}`,
+          categoryId: folderName,
+          type: TYPE.DOUBLE,
+          subType: 0,
+          isPremium: true,
+          coinToUnlock: 0,
+          createdAt: ts++,
+          medias: [
+            { url: cdnUrl(folderName, obj["0"]), name: obj["0"], thumbUrl:"", contentType:"image/webp" },
+            { url: cdnUrl(folderName, obj["1"]), name: obj["1"], thumbUrl:"", contentType:"image/webp" },
+          ]
+        });
       }
 
       // DAYS
-      for (const name of fileSet) {
-        const m = name.match(/^days_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
-        if (!m) continue;
-        const n = parseInt(m[1], 10);
-        const id = `${folderName}_${m[1]}`;
-        ensure(id, { id, type: 3, n, isLive:false, hasPreview:false, hours: new Set() }).hours.add(m[2]);
-      }
-
-      // COUPLE (only couple_###.webp)
-      for (const name of fileSet) {
-        const m = name.match(/^couple_(\d{3})\.webp$/i);
-        if (!m) continue;
-        const n = parseInt(m[1], 10);
-        const id = `${folderName}_${m[1]}`;
-        ensure(id, { id, type: 4, n, isLive:false, hasPreview: !!previewByBase.get(name) });
-      }
-
-      // LIVE/STILL
-      const baseMap = new Map(); // base -> { mp4, webp }
-      for (const name of fileSet) {
-        const e = extOf(name);
-        if (e !== "mp4" && e !== "webp") continue;
-        if (name.includes("_preview.")) continue;
-
-        const base = name.slice(0, name.lastIndexOf("."));
-
-        // IMPORTANT: ignore couple_001_0.webp etc
-        if (/^couple_\d{3}_.+/i.test(base)) continue;
-        if (/^double_\d{3}_.+/i.test(name)) continue;
-        if (/^days_\d{3}_.+/i.test(name)) continue;
-
-        if (!isValidStillLiveBase(base)) continue;
-
-        const rec = baseMap.get(base) || { mp4:false, webp:false, base };
-        if (e === "mp4") rec.mp4 = true;
-        if (e === "webp") rec.webp = true;
-        baseMap.set(base, rec);
-      }
-
-      for (const rec of baseMap.values()) {
-        const m = rec.base.match(/_(\d{3})$/);
-        if (!m) continue;
-        const id = `${folderName}_${m[1]}`;
-        if (groups.has(id)) continue; // do not override special types
-        const n = parseInt(m[1], 10);
-
-        const webpName = `${rec.base}.webp`;
-        const isLive = rec.mp4 && rec.webp;
-        const hasPreview = !!previewByBase.get(webpName);
-
-        ensure(id, { id, type: isLive ? 0 : 1, n, isLive, hasPreview });
-      }
-
-      // validate special ones (optional)
-      // double needs both 0 and 1
-      for (const g of groups.values()) {
-        if (g.type === 2 && g.parts && g.parts.size < 2) {
-          // still keep, but mark
+      for (const [num, hm] of [...daysByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+        const order = ["6","12","18","24"];
+        const medias = [];
+        for (const h of order) {
+          const f = hm.get(h);
+          if (!f) continue;
+          medias.push({
+            url: cdnUrl(folderName, f),
+            name: f,
+            thumbUrl: "",
+            hour: hourToHHMM(h),
+            contentType: "image/webp"
+          });
         }
-        if (g.type === 3 && g.hours && g.hours.size < 4) {
-          // still keep, but mark
+        if (!medias.length) continue;
+        items.push({
+          idBase: `${folderName}_days_${num}`,
+          categoryId: folderName,
+          type: TYPE.DAYS,
+          subType: 0,
+          isPremium: true,
+          coinToUnlock: 0,
+          createdAt: ts++,
+          medias
+        });
+      }
+
+      // COUPLE
+      for (const [num, obj] of [...coupleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
+        const medias = [];
+        if (obj.single) {
+          medias.push({
+            url: cdnUrl(folderName, obj.single),
+            name: obj.single,
+            thumbUrl: obj.preview ? cdnUrl(folderName, obj.preview) : "",
+            contentType: "image/webp"
+          });
+        } else {
+          if (obj["0"]) medias.push({ url: cdnUrl(folderName, obj["0"]), name: obj["0"], thumbUrl:"", contentType:"image/webp" });
+          if (obj["1"]) medias.push({ url: cdnUrl(folderName, obj["1"]), name: obj["1"], thumbUrl:"", contentType:"image/webp" });
+        }
+        if (!medias.length) continue;
+        items.push({
+          idBase: `${folderName}_${num}`,
+          categoryId: folderName,
+          type: TYPE.COUPLE,
+          subType: 0,
+          isPremium: true,
+          coinToUnlock: 0,
+          createdAt: ts++,
+          medias
+        });
+      }
+
+      // LIVE / STILL by key prefix|num
+      const keys = new Set([...imageByKey.keys(), ...mp4ByKey.keys()]);
+      const sortedKeys = [...keys].sort((a,b)=>{
+        const [pa,na]=a.split("|"); const [pb,nb]=b.split("|");
+        if (na!==nb) return na.localeCompare(nb);
+        return pa.localeCompare(pb);
+      });
+
+      for (const key of sortedKeys) {
+        const [prefix, num] = key.split("|");
+        const mp4 = mp4ByKey.get(key);
+        const img = imageByKey.get(key);
+        if (!mp4 && !img) continue;
+
+        const idBase = (prefix === defPrefix) ? `${folderName}_${num}` : `${folderName}_${prefix}_${num}`;
+
+        if (mp4) {
+          const previewFile = previewByKey.get(`${prefix}|${num}`);
+          const previewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
+          items.push({
+            idBase,
+            categoryId: folderName,
+            type: TYPE.LIVE,
+            subType: 0,
+            isPremium: true,
+            coinToUnlock: 0,
+            createdAt: ts++,
+            medias: [
+              { url: cdnUrl(folderName, mp4), name: mp4, thumbUrl:"", contentType: contentTypeFromExt(mp4) },
+              ...(img ? [{
+                url: cdnUrl(folderName, img),
+                name: img,
+                thumbUrl: previewUrl,              // sẽ bật/tắt theo checkbox (orders)
+                contentType: contentTypeFromExt(img)
+              }] : [])
+            ],
+            _livePreviewUrl: previewUrl,
+            _hasPreview: !!previewUrl
+          });
+        } else {
+          items.push({
+            idBase,
+            categoryId: folderName,
+            type: TYPE.STILL,
+            subType: 0,
+            isPremium: true,
+            coinToUnlock: 0,
+            createdAt: ts++,
+            medias: [
+              { url: cdnUrl(folderName, img), name: img, thumbUrl:"", contentType: contentTypeFromExt(img) }
+            ]
+          });
         }
       }
 
-      return [...groups.values()].sort((a,b)=> (a.n ?? 0) - (b.n ?? 0));
+      // stable sort by idBase
+      items.sort((a,b)=>a.idBase.localeCompare(b.idBase,"en"));
+      return items;
     }
 
-    function typeLabel(t) {
-      if (t === 0) return "LIVE";
-      if (t === 1) return "STILL";
-      if (t === 2) return "DOUBLE";
-      if (t === 3) return "DAYS";
-      if (t === 4) return "COUPLE";
-      return "UNKNOWN";
+    /** ========= orders apply + render ========= */
+    function ensureCategoryState(catId){
+      if (!ordersState.categories[catId]) {
+        ordersState.categories[catId] = { order: [], liveUsePreview: {} };
+      }
+      return ordersState.categories[catId];
     }
 
-    function renderFolders(list) {
+    function applyOrder(catId, items){
+      const st = ensureCategoryState(catId);
+
+      const byId = new Map(items.map(it => [it.idBase, it]));
+      const out = [];
+
+      // take ordered ones first
+      for (const id of st.order) {
+        const it = byId.get(id);
+        if (it) { out.push(it); byId.delete(id); }
+      }
+      // append the rest
+      for (const it of byId.values()) out.push(it);
+
+      return out;
+    }
+
+    function syncOrderFromDOM(catId){
+      const st = ensureCategoryState(catId);
+      const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
+      st.order = ids;
+    }
+
+    function pickThumbForItem(item){
+      // returns {kind:"image"|"video", src:"..."}
+      if (item.type === TYPE.LIVE) {
+        // ưu tiên thumbUrl (preview) nếu đang bật; nếu không thì dùng image url; nếu không có image thì dùng video
+        const img = item.medias.find(m => (m.contentType||"").startsWith("image/"));
+        const vid = item.medias.find(m => (m.contentType||"").startsWith("video/"));
+        if (img) return { kind:"image", src: img.thumbUrl || img.url };
+        if (vid) return { kind:"video", src: vid.url };
+        return { kind:"image", src:"" };
+      }
+      if (item.type === TYPE.DAYS) {
+        const m = item.medias[0];
+        return { kind:"image", src: m?.url || "" };
+      }
+      if (item.type === TYPE.DOUBLE) {
+        const m = item.medias[0];
+        return { kind:"image", src: m?.url || "" };
+      }
+      // couple/still
+      const img = item.medias.find(m => (m.contentType||"").startsWith("image/"));
+      if (img) return { kind:"image", src: img.thumbUrl || img.url };
+      const vid = item.medias.find(m => (m.contentType||"").startsWith("video/"));
+      if (vid) return { kind:"video", src: vid.url };
+      return { kind:"image", src:"" };
+    }
+
+    function typeLabel(t){
+      if (t===TYPE.LIVE) return "LIVE";
+      if (t===TYPE.STILL) return "STILL";
+      if (t===TYPE.DOUBLE) return "DOUBLE";
+      if (t===TYPE.DAYS) return "DAYS";
+      if (t===TYPE.COUPLE) return "COUPLE";
+      return String(t);
+    }
+
+    function renderItems(catId, items){
+      elList.innerHTML = "";
+      const q = elQ.value.trim().toLowerCase();
+      const st = ensureCategoryState(catId);
+
+      const filtered = items.filter(it => it.idBase.toLowerCase().includes(q));
+      elItemCount.textContent = `Items: ${filtered.length}/${items.length}`;
+
+      for (const it of filtered) {
+        const row = document.createElement("div");
+        row.className = "item";
+        row.draggable = true;
+        row.dataset.id = it.idBase;
+
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+
+        const picked = pickThumbForItem(it);
+        if (picked.kind === "video") {
+          const v = document.createElement("video");
+          v.src = picked.src;
+          v.muted = true;
+          v.playsInline = true;
+          v.loop = true;
+          v.autoplay = true;
+          v.preload = "metadata";
+          thumb.appendChild(v);
+        } else {
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.src = picked.src;
+          img.alt = it.idBase;
+          thumb.appendChild(img);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+
+        const pill = `${typeLabel(it.type)} · ${it.idBase}`;
+        meta.innerHTML = `
+          <div class="row" style="justify-content:space-between;">
+            <div class="name" title="${it.idBase}">${it.idBase}</div>
+            <div class="handle" title="Kéo để đổi vị trí">⠿ Drag</div>
+          </div>
+          <div class="pill">${pill}</div>
+        `;
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        // open first media
+        const openBtn = document.createElement("a");
+        openBtn.className = "btn";
+        openBtn.textContent = "🔗 Open";
+        openBtn.href = (it.medias[0]?.url || "#");
+        openBtn.target = "_blank";
+        openBtn.rel = "noreferrer";
+        actions.appendChild(openBtn);
+
+        // LIVE preview toggle
+        if (it.type === TYPE.LIVE) {
+          const hasPreview = !!it._hasPreview;
+          const checked = hasPreview ? (st.liveUsePreview[it.idBase] ?? true) : false;
+
+          const lb = document.createElement("label");
+          lb.className = "mut";
+          lb.title = "Trong JSON: nếu tick thì medias[1].thumbUrl = ..._preview.webp, nếu bỏ tick thì thumbUrl = \"\"";
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.disabled = !hasPreview;
+          cb.checked = checked;
+
+          cb.onchange = () => {
+            st.liveUsePreview[it.idBase] = cb.checked;
+            // cập nhật thumb ngay cho UI
+            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (img) img.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
+            // rerender thumb nhanh
+            renderItems(catId, items);
+          };
+
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(" use preview thumb"));
+          actions.appendChild(lb);
+
+          if (!hasPreview) {
+            const h = document.createElement("div");
+            h.className = "hint";
+            h.textContent = "LIVE này không có _preview.webp";
+            actions.appendChild(h);
+          }
+        }
+
+        meta.appendChild(actions);
+
+        row.appendChild(thumb);
+        row.appendChild(meta);
+        elList.appendChild(row);
+      }
+
+      // drag & drop
+      let dragging = null;
+
+      elList.querySelectorAll(".item").forEach(el => {
+        el.addEventListener("dragstart", (e) => {
+          dragging = el;
+          el.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          elDropHint.style.display = "block";
+        });
+
+        el.addEventListener("dragend", () => {
+          el.classList.remove("dragging");
+          elDropHint.style.display = "none";
+          dragging = null;
+          syncOrderFromDOM(catId);
+        });
+
+        el.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          if (!dragging || dragging === el) return;
+
+          const rect = el.getBoundingClientRect();
+          const before = (e.clientY - rect.top) < rect.height / 2;
+          if (before) {
+            elList.insertBefore(dragging, el);
+          } else {
+            elList.insertBefore(dragging, el.nextSibling);
+          }
+        });
+      });
+    }
+
+    /** ========= folder load ========= */
+    async function loadFolders() {
+      setStatus("Loading folders... (requires token)");
+      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
+      allFolders = data
+        .filter(x => x.type === "dir")
+        .map(x => ({ name: x.name, path: x.path }))
+        .filter(x => /^\d+_/.test(x.name))
+        .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+      renderFolders();
+      setStatus("");
+    }
+
+    function renderFolders(){
       elFolders.innerHTML = "";
       const q = elQ.value.trim().toLowerCase();
-      const shown = list.filter(f => f.name.toLowerCase().includes(q));
-      elFolderCount.textContent = `${shown.length}/${list.length}`;
+      const shown = allFolders.filter(f => f.name.toLowerCase().includes(q));
+      elFolderCount.textContent = `${shown.length}/${allFolders.length}`;
 
       for (const f of shown) {
         const div = document.createElement("div");
@@ -327,235 +720,218 @@
       }
     }
 
-    function currentFolderCfg() {
-      const all = loadOrdersConfig();
-      return all[activeFolder] || (all[activeFolder] = { order: [], livePreview: {}, baseCreatedAt: Math.floor(Date.now()/1000) });
+    async function listFolderFiles(folderName){
+      const path = `${ROOT_DIR}/${folderName}`;
+      const data = await fetchJson(ghContentsUrl(path), true);
+      return data.filter(x => x.type === "file").map(x => x.name);
     }
 
-    function setBaseCreatedAtUI(val) {
-      elBaseCreatedAt.value = String(val ?? Math.floor(Date.now()/1000));
-    }
-
-    function getBaseCreatedAtUI() {
-      const n = parseInt(elBaseCreatedAt.value, 10);
-      return Number.isFinite(n) ? n : Math.floor(Date.now()/1000);
-    }
-
-    function renderList(items) {
-      elList.innerHTML = "";
-      const q = elQ.value.trim().toLowerCase();
-      const cfgAll = loadOrdersConfig();
-      const cfg = cfgAll[activeFolder] || { order: [], livePreview: {}, baseCreatedAt: Math.floor(Date.now()/1000) };
-
-      // use order array if present, else numeric
-      const orderIndex = new Map();
-      (cfg.order || []).forEach((id, idx) => orderIndex.set(id, idx));
-
-      const shown = items
-        .filter(x => x.id.toLowerCase().includes(q) || typeLabel(x.type).toLowerCase().includes(q))
-        .sort((a,b) => {
-          const ia = orderIndex.has(a.id) ? orderIndex.get(a.id) : 1e9;
-          const ib = orderIndex.has(b.id) ? orderIndex.get(b.id) : 1e9;
-          if (ia !== ib) return ia - ib;
-          return (a.n ?? 0) - (b.n ?? 0);
-        });
-
-      elItemCount.textContent = `Items: ${shown.length}`;
-
-      for (const it of shown) {
-        const row = document.createElement("div");
-        row.className = "item";
-        row.draggable = true;
-        row.dataset.id = it.id;
-
-        const handle = document.createElement("div");
-        handle.className = "handle";
-        handle.textContent = "≡";
-
-        const col = document.createElement("div");
-        col.className = "col";
-
-        const top = document.createElement("div");
-        top.className = "row";
-        top.innerHTML = `<span class="pill">${typeLabel(it.type)}</span> <code>${it.id}</code> <span class="small">#${String(it.n).padStart(3,"0")}</span>`;
-        col.appendChild(top);
-
-        if (it.type === 0) {
-          const line = document.createElement("div");
-          line.className = "row";
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = (cfg.livePreview?.[it.id] !== false); // default true
-          cb.disabled = !it.hasPreview; // nếu không có preview file thì disable
-          cb.onchange = () => {
-            cfg.livePreview = cfg.livePreview || {};
-            cfg.livePreview[it.id] = cb.checked; // true/false
-          };
-          const label = document.createElement("label");
-          label.className = "mut";
-          label.appendChild(cb);
-          label.appendChild(document.createTextNode(" include preview thumbUrl"));
-          line.appendChild(label);
-
-          const hint = document.createElement("span");
-          hint.className = "small";
-          hint.textContent = it.hasPreview ? "(có file _preview.webp)" : "(không có preview file)";
-          line.appendChild(hint);
-
-          col.appendChild(line);
-        } else {
-          const hint = document.createElement("div");
-          hint.className = "small";
-          hint.textContent = it.type === 4 ? "couple_###.webp (+ optional _preview)" :
-                             it.type === 2 ? "double_###_0.webp + double_###_1.webp" :
-                             it.type === 3 ? "days_###_6h/12h/18h/24h.webp" :
-                             it.type === 1 ? "still: *.webp" : "";
-          col.appendChild(hint);
-        }
-
-        row.appendChild(handle);
-        row.appendChild(col);
-        elList.appendChild(row);
-      }
-
-      // Drag & drop reordering (updates cfg.order)
-      let dragId = null;
-
-      elList.querySelectorAll(".item").forEach(node => {
-        node.addEventListener("dragstart", (e) => {
-          dragId = node.dataset.id;
-          e.dataTransfer.effectAllowed = "move";
-        });
-        node.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-        });
-        node.addEventListener("drop", (e) => {
-          e.preventDefault();
-          const targetId = node.dataset.id;
-          if (!dragId || dragId === targetId) return;
-
-          const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
-          const a = ids.indexOf(dragId);
-          const b = ids.indexOf(targetId);
-          if (a < 0 || b < 0) return;
-
-          ids.splice(a, 1);
-          ids.splice(b, 0, dragId);
-
-          cfg.order = ids;
-          cfg.baseCreatedAt = getBaseCreatedAtUI();
-          cfgAll[activeFolder] = cfg;
-          saveOrdersConfig(cfgAll);
-
-          // rerender
-          renderList(items);
-        });
-      });
-    }
-
-    async function loadFolders() {
-      setStatus("Loading folders...");
-      elTitle.textContent = "Chọn folder";
-      elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}`;
-      elItemCount.textContent = "";
-      elList.innerHTML = "";
-
-      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
-
-      allFolders = data
-        .filter(x => x.type === "dir")
-        .map(x => ({ name: x.name, path: x.path }))
-        .sort((a,b) => a.name.localeCompare(b.name, "en"));
-
-      renderFolders(allFolders);
-      setStatus("");
-    }
-
-    async function openFolder(folderName) {
+    async function openFolder(folderName){
       activeFolder = folderName;
-      renderFolders(allFolders);
+      renderFolders();
 
       elTitle.textContent = `📁 ${folderName}`;
-      elSubtitle.textContent = `${ROOT_DIR}/${folderName}`;
+      elSubtitle.textContent = `${RES_OWNER}/${RES_REPO}/${ROOT_DIR}/${folderName}`;
       setStatus("Loading files...");
-      elList.innerHTML = "";
 
-      const data = await fetchJson(ghContentsUrl(`${ROOT_DIR}/${folderName}`), true);
-      activeFiles = data
-        .filter(x => x.type === "file")
-        .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
-        .sort((a,b) => a.name.localeCompare(b.name, "en"));
-
-      const items = detectItems(folderName, activeFiles);
-
-      // init cfg
-      const cfgAll = loadOrdersConfig();
-      if (!cfgAll[folderName]) {
-        cfgAll[folderName] = {
-          order: items.map(x => x.id),
-          livePreview: {},
-          baseCreatedAt: Math.floor(Date.now()/1000)
-        };
-        saveOrdersConfig(cfgAll);
-      } else {
-        // ensure every item exists in order
-        const cfg = cfgAll[folderName];
-        cfg.order = Array.isArray(cfg.order) ? cfg.order : [];
-        const set = new Set(cfg.order);
-        for (const it of items) if (!set.has(it.id)) cfg.order.push(it.id);
-        cfg.livePreview = cfg.livePreview || {};
-        if (!Number.isFinite(cfg.baseCreatedAt)) cfg.baseCreatedAt = Math.floor(Date.now()/1000);
-        cfgAll[folderName] = cfg;
-        saveOrdersConfig(cfgAll);
+      // cache
+      if (folderCache.has(folderName)) {
+        const cached = folderCache.get(folderName);
+        setStatus(`Loaded from cache (${cached.items.length} items).`);
+        const st = ensureCategoryState(folderName);
+        // apply preview toggle state to items
+        for (const it of cached.items) {
+          if (it.type === TYPE.LIVE) {
+            const use = (st.liveUsePreview[it.idBase] ?? true);
+            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+          }
+        }
+        const ordered = applyOrder(folderName, cached.items);
+        renderItems(folderName, ordered);
+        return;
       }
 
-      setBaseCreatedAtUI(cfgAll[folderName].baseCreatedAt);
+      const files = await listFolderFiles(folderName);
+      const items = buildItemsFromFiles(folderName, files, Math.floor(Date.now()/1000));
 
-      setStatus("");
-      renderList(items);
+      // apply saved live preview choice
+      const st = ensureCategoryState(folderName);
+      for (const it of items) {
+        if (it.type === TYPE.LIVE) {
+          const use = (st.liveUsePreview[it.idBase] ?? true);
+          const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+          if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+        }
+      }
+
+      folderCache.set(folderName, { files, items, updatedAt: Date.now() });
+
+      const ordered = applyOrder(folderName, items);
+      setStatus(`Loaded ${items.length} items.`);
+      renderItems(folderName, ordered);
     }
 
-    document.getElementById("reload").onclick = () => loadFolders();
+    /** ========= upload/load orders.json ========= */
+    async function uploadOrdersJson(){
+      saveOrdersLocal();
+      setStatus(`Uploading ${ORDERS_PATH} ...`);
+      const txt = JSON.stringify(ordersState, null, 2);
+      await upsertTextFile(ORDERS_PATH, txt, `Update orders (${ordersState.updatedAt})`);
+      setStatus(`✅ Uploaded ${ORDERS_PATH}\nURL:\nhttps://tramiune.github.io/${RES_REPO}/${ORDERS_PATH}`);
+      alert("Upload orders.json xong ✅");
+    }
 
-    document.getElementById("save").onclick = () => {
-      if (!activeFolder) return alert("Chọn folder trước.");
-      const cfgAll = loadOrdersConfig();
-      const cfg = cfgAll[activeFolder] || {};
-      cfg.baseCreatedAt = getBaseCreatedAtUI();
-      cfgAll[activeFolder] = cfg;
-      saveOrdersConfig(cfgAll);
-      alert("Saved to localStorage ✅");
+    async function tryLoadOrdersFromGitHub(){
+      setStatus(`Loading ${ORDERS_PATH} ...`);
+      try {
+        const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
+        // contents API returns base64 content (when file is small)
+        const content = meta?.content || "";
+        const raw = decodeURIComponent(escape(atob(content.replace(/\n/g,""))));
+        const obj = JSON.parse(raw);
+        ordersState = obj;
+        saveOrdersLocal();
+        setStatus(`✅ Loaded orders from GitHub\nupdatedAt=${ordersState.updatedAt || 0}`);
+        alert("Load orders.json từ GitHub xong ✅");
+      } catch (e) {
+        setStatus(`Không load được orders từ GitHub (có thể chưa tạo file)\n${e.message || e}`);
+      }
+    }
+
+    /** ========= generate ordered JSON all ========= */
+    function uniqId(desired, used){
+      if (!used.has(desired)) { used.add(desired); return desired; }
+      let i=2;
+      while (used.has(`${desired}_${i}`)) i++;
+      const out = `${desired}_${i}`;
+      used.add(out);
+      return out;
+    }
+
+    async function generateAllOrdered(){
+      const ok = confirm(
+        `Generate JSON (ALL, ordered) + upload?\n\n`+
+        `orders: ${ORDERS_PATH}\noutput: ${OUTPUT_ALL_JSON}\n\n`+
+        `⚠️ overwrite file cũ`
+      );
+      if (!ok) return;
+
+      setStatus("Generating ALL...");
+
+      const usedIds = new Set();
+      const all = [];
+      let ts = Math.floor(Date.now()/1000);
+
+      // ensure folders loaded
+      if (!allFolders.length) await loadFolders();
+
+      for (const f of allFolders) {
+        const folderName = f.name;
+        setStatus(`Building: ${folderName} ...`);
+
+        // load (use cache if possible)
+        let items;
+        if (folderCache.has(folderName)) {
+          items = folderCache.get(folderName).items;
+        } else {
+          const files = await listFolderFiles(folderName);
+          items = buildItemsFromFiles(folderName, files, ts);
+          folderCache.set(folderName, { files, items, updatedAt: Date.now() });
+        }
+
+        // apply preview choices
+        const st = ensureCategoryState(folderName);
+        for (const it of items) {
+          if (it.type === TYPE.LIVE) {
+            const use = (st.liveUsePreview[it.idBase] ?? true);
+            const img = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (img) img.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+          }
+        }
+
+        // apply order array
+        const ordered = applyOrder(folderName, items);
+
+        // push output (ensure unique id)
+        for (const it of ordered) {
+          const id = uniqId(it.idBase, usedIds);
+          const out = {
+            id,
+            medias: it.medias.map(m => {
+              const mm = { ...m };
+              if (mm.hour == null) delete mm.hour;
+              return mm;
+            }),
+            categoryId: it.categoryId,
+            isPremium: it.isPremium,
+            createdAt: it.createdAt,
+            subType: it.subType,
+            type: it.type,
+            coinToUnlock: it.coinToUnlock
+          };
+          all.push(out);
+          ts = Math.max(ts, it.createdAt + 1);
+        }
+      }
+
+      const jsonText = JSON.stringify(all, null, 2);
+      setStatus(`Uploading ${OUTPUT_ALL_JSON} ...\nItems: ${all.length}`);
+      await upsertTextFile(OUTPUT_ALL_JSON, jsonText, `Generate wallpaper.json ordered (${all.length})`);
+
+      setStatus(`✅ Done\nUploaded: ${OUTPUT_ALL_JSON}\nItems: ${all.length}\nURL:\nhttps://tramiune.github.io/${RES_REPO}/${OUTPUT_ALL_JSON}`);
+      alert("Generate JSON ordered xong ✅");
+    }
+
+    /** ========= events ========= */
+    document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved orders local ✅"); };
+    document.getElementById("loadLocal").onclick = () => {
+      const st = loadOrdersLocal();
+      if (!st) return alert("Chưa có orders trong localStorage");
+      ordersState = st;
+      alert("Loaded orders local ✅");
+      if (activeFolder && folderCache.has(activeFolder)) {
+        const items = folderCache.get(activeFolder).items;
+        const ordered = applyOrder(activeFolder, items);
+        renderItems(activeFolder, ordered);
+      }
     };
-
-    document.getElementById("resetOrder").onclick = () => {
-      if (!activeFolder) return alert("Chọn folder trước.");
-      const items = detectItems(activeFolder, activeFiles);
-      const cfgAll = loadOrdersConfig();
-      cfgAll[activeFolder] = cfgAll[activeFolder] || { order: [], livePreview: {}, baseCreatedAt: Math.floor(Date.now()/1000) };
-      cfgAll[activeFolder].order = items.sort((a,b)=>(a.n??0)-(b.n??0)).map(x => x.id);
-      cfgAll[activeFolder].baseCreatedAt = getBaseCreatedAtUI();
-      saveOrdersConfig(cfgAll);
-      renderList(items);
+    document.getElementById("uploadOrders").onclick = () => {
+      uploadOrdersJson().catch(err => {
+        console.error(err);
+        alert(String(err?.message || err));
+        setStatus(String(err?.message || err));
+      });
+    };
+    document.getElementById("genAll").onclick = () => {
+      generateAllOrdered().catch(err => {
+        console.error(err);
+        alert(String(err?.message || err));
+        setStatus(String(err?.message || err));
+      });
     };
 
     elQ.addEventListener("input", () => {
-      renderFolders(allFolders);
-      if (activeFolder) {
-        const items = detectItems(activeFolder, activeFiles);
-        renderList(items);
+      renderFolders();
+      if (activeFolder && folderCache.has(activeFolder)) {
+        const items = folderCache.get(activeFolder).items;
+        const ordered = applyOrder(activeFolder, items);
+        renderItems(activeFolder, ordered);
       }
     });
 
-    elBaseCreatedAt.addEventListener("change", () => {
-      if (!activeFolder) return;
-      const cfgAll = loadOrdersConfig();
-      cfgAll[activeFolder] = cfgAll[activeFolder] || {};
-      cfgAll[activeFolder].baseCreatedAt = getBaseCreatedAtUI();
-      saveOrdersConfig(cfgAll);
-    });
+    /** boot */
+    (async function boot(){
+      // try load orders local first
+      const st = loadOrdersLocal();
+      if (st) ordersState = st;
 
-    loadFolders().catch(err => setStatus(String(err?.message || err)));
+      // optional: nếu muốn auto load orders.json từ GitHub thì bật dòng dưới
+      // await tryLoadOrdersFromGitHub();
+
+      await loadFolders();
+      setStatus("Ready. Chọn folder để kéo thả sắp xếp.");
+    })();
 </script>
 </body>
 </html>
