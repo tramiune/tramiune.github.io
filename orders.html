@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Orders - Wallpaper JSON</title>
+    <style>
+        :root { --bd:#e7e7e7; --mut:#666; --bg:#fafafa; }
+        body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; background: var(--bg); }
+        header { padding:12px 14px; border-bottom:1px solid var(--bd); display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#fff; position:sticky; top:0; z-index:5; }
+        header b { font-size:14px; }
+        header .mut { color:var(--mut); font-size:12px; }
+        input[type="text"], input[type="password"], input[type="number"], select {
+          padding:8px 10px; border:1px solid var(--bd); border-radius:10px; min-width:220px; background:#fff;
+        }
+        button, a.btn {
+          padding:8px 10px; border:1px solid var(--bd); background:#fff; border-radius:10px; cursor:pointer;
+          text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
+        }
+        button:hover, a.btn:hover { background:#f5f5f5; }
+        label.mut { display:inline-flex; gap:6px; align-items:center; color:var(--mut); font-size:12px; }
+        input[type="checkbox"] { transform: translateY(1px); }
+
+        .wrap { display:grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 64px); }
+        aside { border-right:1px solid var(--bd); padding:10px; overflow:auto; background:#fff; }
+        main { padding:12px; overflow:auto; }
+
+        .folder {
+          padding:9px 10px; border:1px solid var(--bd); border-radius:12px; cursor:pointer;
+          display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;
+        }
+        .folder:hover { background:#f7f7f7; }
+        .folder.active { border-color:#bbb; background:#f5f5f5; }
+
+        .small { font-size:12px; color:var(--mut); }
+        .status { font-size:12px; color:var(--mut); white-space:pre-wrap; margin: 6px 0 10px; }
+
+        .panel {
+          background:#fff; border:1px solid var(--bd); border-radius:14px; padding:12px; margin-bottom:12px;
+        }
+
+        .list { display:flex; flex-direction:column; gap:8px; }
+        .item {
+          border:1px solid var(--bd);
+          border-radius:14px;
+          background:#fff;
+          padding:10px;
+          display:grid;
+          grid-template-columns: 32px 1fr auto;
+          gap:10px;
+          align-items:center;
+          user-select:none;
+        }
+        .drag { font-size:16px; color:#999; cursor:grab; }
+        .item.dragging { opacity:.6; }
+        .meta .name { font-size:13px; font-weight:600; }
+        .meta .sub { font-size:12px; color:var(--mut); margin-top:2px; }
+        .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; margin-right:6px; }
+        .right { display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+        .danger { border-color:#f0c1c1 !important; }
+        code.k { font-size:11px; background:#f6f6f6; border:1px solid #eee; padding:2px 6px; border-radius:8px; }
+    </style>
+</head>
+<body>
+<header>
+    <b>Orders</b>
+    <span class="mut">Reorder items per folder + chọn LIVE “use preview” → lưu vào <code class="k">dev/orders.json</code></span>
+
+    <input id="q" type="text" placeholder="Filter folder/item..." />
+
+    <input id="token" type="password" placeholder="GitHub Token (Contents: write)" style="min-width:260px" />
+    <label class="mut" title="Lưu token trên máy bạn (localStorage)">
+        <input id="remember" type="checkbox" />
+        remember token
+    </label>
+
+    <button id="reload">Reload</button>
+    <button id="loadOrders">Load orders.json</button>
+    <button id="saveOrders">Save orders.json</button>
+    <span class="mut" id="rate"></span>
+
+    <a class="btn" href="./browser.html" target="_blank" rel="noreferrer">↩ Browser</a>
+</header>
+
+<div class="wrap">
+    <aside>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <b style="font-size:13px;">Folders</b>
+            <span class="small" id="folderCount"></span>
+        </div>
+        <div id="folders"></div>
+    </aside>
+
+    <main>
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">
+                <div>
+                    <b id="title" style="font-size:13px;">Chọn folder</b><br/>
+                    <span class="small" id="subtitle"></span>
+                </div>
+                <div class="small" id="itemCount"></div>
+            </div>
+            <div class="status" id="status"></div>
+        </div>
+
+        <div class="panel" id="folderSettings" style="display:none;">
+            <b style="font-size:13px;">Folder settings</b>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+                <label class="mut">baseCreatedAt (seconds)
+                    <input id="baseCreatedAt" type="number" style="min-width:220px" />
+                </label>
+                <button id="applyBaseCreatedAt">Apply</button>
+                <span class="small">createdAt = baseCreatedAt + index (trong order)</span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <b style="font-size:13px;">Items (drag to reorder)</b>
+            <div class="small" style="margin-top:6px;">
+                LIVE (mp4+webp) có checkbox <b>use preview</b> (nếu có file <code class="k">_preview.webp</code>)
+            </div>
+            <div style="margin-top:12px;" class="list" id="list"></div>
+        </div>
+    </main>
+</div>
+
+<script>
+    /** =========================
+     *  CONFIG – sửa ở đây
+     *  ========================= */
+    const OWNER = "tramiune";
+    const REPO  = "tramiune001_res_wallpaper";
+    const BRANCH = "main";
+    const ROOT_DIR = "resources";
+
+    // file lưu cấu hình order
+    const ORDERS_PATH = "dev/orders.json";
+
+    const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
+    const VIDEO_EXT = ["mp4","webm","mov"];
+    /** ========================= */
+
+    const elFolders = document.getElementById("folders");
+    const elList = document.getElementById("list");
+    const elStatus = document.getElementById("status");
+    const elTitle = document.getElementById("title");
+    const elSubtitle = document.getElementById("subtitle");
+    const elFolderCount = document.getElementById("folderCount");
+    const elItemCount = document.getElementById("itemCount");
+    const elQ = document.getElementById("q");
+    const elRate = document.getElementById("rate");
+    const elToken = document.getElementById("token");
+    const elRemember = document.getElementById("remember");
+    const elFolderSettings = document.getElementById("folderSettings");
+    const elBaseCreatedAt = document.getElementById("baseCreatedAt");
+
+    let allFolders = [];
+    let activeFolder = null;
+    let activeFiles = [];
+
+    // orders.json object
+    let ordersDoc = {
+      version: 1,
+      updatedAt: 0,
+      folders: {}
+    };
+
+    function setStatus(s) { elStatus.textContent = s || ""; }
+
+    function extOf(name) {
+      const i = name.lastIndexOf(".");
+      return i >= 0 ? name.slice(i+1).toLowerCase() : "";
+    }
+    function isMediaFile(name) {
+      const e = extOf(name);
+      return IMAGE_EXT.includes(e) || VIDEO_EXT.includes(e);
+    }
+    function isPreviewName(name) { return name.includes("_preview."); }
+
+    function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
+    function ghContentsUrl(path) {
+      const p = encodePath(path);
+      return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
+    }
+
+    function getAuthToken() {
+      const t = elToken.value.trim();
+      if (!t) throw new Error("Bạn chưa nhập GitHub token (cần Contents: write).");
+      return t;
+    }
+
+    async function fetchJson(url, withAuth = false) {
+      const headers = { "Accept": "application/vnd.github+json" };
+      if (withAuth) headers["Authorization"] = `Bearer ${getAuthToken()}`;
+
+      const res = await fetch(url, { headers });
+      const limit = res.headers.get("x-ratelimit-limit");
+      const remain = res.headers.get("x-ratelimit-remaining");
+      if (limit && remain) elRate.textContent = `GitHub API rate: ${remain}/${limit}`;
+
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status}\n${txt}`);
+      }
+      return res.json();
+    }
+
+    async function getFileShaIfExists(path) {
+      try {
+        const meta = await fetchJson(ghContentsUrl(path), true);
+        return meta?.sha || null;
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (msg.includes("404")) return null;
+        return null;
+      }
+    }
+
+    async function upsertTextFile(path, text, commitMsg) {
+      const token = getAuthToken();
+      const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
+      const sha = await getFileShaIfExists(path);
+
+      const body = {
+        message: commitMsg || `Update ${path}`,
+        content: btoa(unescape(encodeURIComponent(text))),
+        branch: BRANCH
+      };
+      if (sha) body.sha = sha;
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`PUT failed: HTTP ${res.status}\n${txt}`);
+      }
+      return res.json();
+    }
+
+    /** remember token (localStorage) */
+    const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
+    (function initRememberToken(){
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        elToken.value = saved;
+        elRemember.checked = true;
+      }
+      elRemember.addEventListener("change", () => {
+        if (elRemember.checked) {
+          if (elToken.value.trim()) localStorage.setItem(LS_KEY, elToken.value.trim());
+        } else {
+          localStorage.removeItem(LS_KEY);
+        }
+      });
+      elToken.addEventListener("input", () => {
+        if (elRemember.checked) localStorage.setItem(LS_KEY, elToken.value.trim());
+      });
+    })();
+
+    function mainPrefixOfFolder(folderName) {
+      return folderName.replace(/^\d+_/, ""); // 103_super_hero -> super_hero
+    }
+
+    function parseBaseKey(fileName) {
+      // remove extension
+      const dot = fileName.lastIndexOf(".");
+      let base = dot >= 0 ? fileName.slice(0, dot) : fileName;
+
+      // strip _preview
+      base = base.replace(/_preview$/i, "");
+
+      return base; // anime_003, super_hero_001, cinematic_001, double_001_0, days_001_6h ...
+    }
+
+    function groupItemsFromFiles(folderName, files) {
+      // Build maps
+      const byName = new Map(files.map(f => [f.name, f]));
+      const previewForWebp = new Map(); // base.webp -> base_preview.webp
+      for (const f of files) {
+        if (isPreviewName(f.name) && extOf(f.name) === "webp") {
+          const base = f.name.replace("_preview.webp", ".webp");
+          previewForWebp.set(base, f.name);
+        }
+      }
+
+      // Group candidates
+      const groups = new Map(); // groupKey -> { kind, bases, hasPreview, ...}
+      const mainPrefix = mainPrefixOfFolder(folderName);
+
+      function ensureGroup(groupKey, init) {
+        if (!groups.has(groupKey)) groups.set(groupKey, Object.assign({ groupKey }, init || {}));
+        return groups.get(groupKey);
+      }
+
+      for (const f of files) {
+        if (!isMediaFile(f.name)) continue;
+
+        const e = extOf(f.name);
+        const base = parseBaseKey(f.name);
+
+        // DOUBLE: double_001_0.webp + double_001_1.webp (group by double_001)
+        const mDouble = base.match(/^(double_\d{3})_(0|1)$/i);
+        if (mDouble && e === "webp") {
+          const key = mDouble[1];
+          const g = ensureGroup(key, { type: 2, medias: [], baseCreatedAt: null });
+          g.medias.push({ name: f.name });
+          continue;
+        }
+
+        // DAYS: days_001_6h.webp ... group by days_001
+        const mDays = base.match(/^(days_\d{3})_(\d{1,2})h$/i);
+        if (mDays && e === "webp") {
+          const key = mDays[1];
+          const hourNum = parseInt(mDays[2], 10);
+          const hour = String(hourNum).padStart(2, "0") + ":00";
+          const g = ensureGroup(key, { type: 3, medias: [], baseCreatedAt: null });
+          g.medias.push({ name: f.name, hour });
+          continue;
+        }
+
+        // COUPLE: couple_001.webp (optional preview)
+        const mCouple = base.match(/^(couple_\d{3})$/i);
+        if (mCouple && e === "webp") {
+          const key = mCouple[1];
+          const g = ensureGroup(key, { type: 4, medias: [], baseCreatedAt: null });
+          g.medias.push({ name: f.name });
+          continue;
+        }
+
+        // LIVE: base.mp4 + base.webp
+        // STILL: base.webp only (no mp4)
+        // Group by "base prefix+_###" ideally; we use full baseKey as groupKey
+        // Example: cinematic_001, super_hero_001, anime_003
+        if (e === "mp4") {
+          const g = ensureGroup(base, { type: 0, hasMp4: true, hasWebp: false, medias: [], baseCreatedAt: null });
+          g.hasMp4 = true;
+          g.medias.push({ name: f.name });
+          continue;
+        }
+        if (e === "webp") {
+          const g = ensureGroup(base, { type: 1, hasMp4: false, hasWebp: true, medias: [], baseCreatedAt: null });
+          g.hasWebp = true;
+          g.medias.push({ name: f.name });
+          continue;
+        }
+      }
+
+      // Normalize: decide LIVE if both mp4+webp exist
+      for (const g of groups.values()) {
+        if (g.type === 0 || g.type === 1) {
+          const names = new Set(g.medias.map(x => x.name));
+          const base = g.groupKey;
+          const mp4 = `${base}.mp4`;
+          const webp = `${base}.webp`;
+
+          const hasMp4 = names.has(mp4);
+          const hasWebp = names.has(webp);
+
+          if (hasMp4 && hasWebp) g.type = 0; // LIVE
+          else if (hasWebp) g.type = 1;     // STILL
+          else continue;
+
+          // Ensure ordering: mp4 then webp (and preview not as separate media; preview is thumbUrl)
+          g.medias = [];
+          if (g.type === 0) g.medias.push({ name: mp4 });
+          g.medias.push({ name: webp });
+
+          const previewName = previewForWebp.get(webp) || "";
+          g.preview = previewName;
+          g.baseKey = base;
+
+          // ID rule (avoid duplicates):
+          // - if base looks like "<prefix>_<3digits>", and prefix == mainPrefix => id = folder_<3digits>
+          // - else if base matches "<prefix>_<3digits>" => id = folder_<prefix>_<3digits>
+          // - else => id = folder_<base>
+          let id = "";
+          const mm = base.match(/^(.+?)_(\d{3})$/);
+          if (mm) {
+            const prefix = mm[1];
+            const num = mm[2];
+            if (prefix === mainPrefix) id = `${folderName}_${num}`;
+            else id = `${folderName}_${prefix}_${num}`;
+          } else {
+            id = `${folderName}_${base}`;
+          }
+          g.id = id;
+
+          // pretty label
+          g.label = `${base}${g.type===0 ? " (LIVE)" : " (STILL)"}`;
+        } else {
+          // double/days/couple id
+          const key = g.groupKey; // double_001, days_001, couple_001
+          const mm = key.match(/^([a-z_]+)_(\d{3})$/i);
+          const num = mm ? mm[2] : key;
+          g.id = `${folderName}_${num}`; // consistent
+          g.label = `${key.toLowerCase()} (type ${g.type})`;
+        }
+      }
+
+      // Filter valid groups (must have medias)
+      const out = [...groups.values()].filter(g => Array.isArray(g.medias) && g.medias.length > 0);
+
+      // sort default by groupKey
+      out.sort((a,b)=> String(a.groupKey).localeCompare(String(b.groupKey), "en"));
+
+      return out;
+    }
+
+    function renderFolders(list) {
+      elFolders.innerHTML = "";
+      const q = elQ.value.trim().toLowerCase();
+      const shown = list.filter(f => f.name.toLowerCase().includes(q));
+      elFolderCount.textContent = `${shown.length}/${list.length}`;
+
+      for (const f of shown) {
+        const div = document.createElement("div");
+        div.className = "folder" + (activeFolder === f.name ? " active" : "");
+        div.innerHTML = `<span>📁 ${f.name}</span><span class="small">open</span>`;
+        div.onclick = () => openFolder(f.name);
+        elFolders.appendChild(div);
+      }
+    }
+
+    function ensureFolderConfig(folderName) {
+      if (!ordersDoc.folders[folderName]) {
+        ordersDoc.folders[folderName] = {
+          baseCreatedAt: Math.floor(Date.now()/1000),
+          order: [],
+          liveUsePreview: {} // baseKey -> boolean
+        };
+      } else {
+        ordersDoc.folders[folderName].baseCreatedAt ??= Math.floor(Date.now()/1000);
+        ordersDoc.folders[folderName].order ??= [];
+        ordersDoc.folders[folderName].liveUsePreview ??= {};
+      }
+      return ordersDoc.folders[folderName];
+    }
+
+    function applyOrder(folderName, groups) {
+      const cfg = ensureFolderConfig(folderName);
+      const order = Array.isArray(cfg.order) ? cfg.order : [];
+
+      // order uses groupKey list (baseKey or double_001 / days_001 / couple_001)
+      const byKey = new Map(groups.map(g => [g.groupKey, g]));
+      const out = [];
+
+      for (const k of order) {
+        if (byKey.has(k)) {
+          out.push(byKey.get(k));
+          byKey.delete(k);
+        }
+      }
+      // append leftover
+      for (const g of groups) {
+        if (byKey.has(g.groupKey)) out.push(g);
+      }
+      // update cfg.order to reflect current full list
+      cfg.order = out.map(g => g.groupKey);
+
+      return out;
+    }
+
+    function renderList(folderName, groups) {
+      elList.innerHTML = "";
+      const cfg = ensureFolderConfig(folderName);
+      elFolderSettings.style.display = "";
+      elBaseCreatedAt.value = String(cfg.baseCreatedAt || Math.floor(Date.now()/1000));
+
+      // filter by search
+      const q = elQ.value.trim().toLowerCase();
+      const shown = groups.filter(g =>
+        (g.groupKey || "").toLowerCase().includes(q) ||
+        (g.id || "").toLowerCase().includes(q)
+      );
+
+      elItemCount.textContent = `Items: ${shown.length}/${groups.length}`;
+
+      for (const g of shown) {
+        const row = document.createElement("div");
+        row.className = "item";
+        row.draggable = true;
+        row.dataset.key = g.groupKey;
+
+        const drag = document.createElement("div");
+        drag.className = "drag";
+        drag.textContent = "⠿";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+
+        const pills = [];
+        pills.push(`<span class="pill">type ${g.type}</span>`);
+        pills.push(`<span class="pill">id: ${g.id}</span>`);
+        if (g.type === 0 && g.preview) pills.push(`<span class="pill">has preview</span>`);
+        meta.innerHTML = `
+          <div class="name">${g.label || g.groupKey}</div>
+          <div class="sub">${pills.join(" ")}<br/><span class="small">groupKey: <code class="k">${g.groupKey}</code></span></div>
+        `;
+
+        const right = document.createElement("div");
+        right.className = "right";
+
+        // LIVE preview toggle
+        if (g.type === 0) {
+          const chk = document.createElement("input");
+          chk.type = "checkbox";
+          chk.disabled = !g.preview;
+          chk.checked = !!cfg.liveUsePreview[g.groupKey] && !!g.preview;
+          // default: if not set and has preview => true
+          if (cfg.liveUsePreview[g.groupKey] == null && g.preview) chk.checked = true;
+
+          chk.onchange = () => {
+            cfg.liveUsePreview[g.groupKey] = !!chk.checked;
+            ordersDoc.updatedAt = Math.floor(Date.now()/1000);
+          };
+
+          const lb = document.createElement("label");
+          lb.className = "mut";
+          lb.title = g.preview ? "Trong JSON, thumbUrl sẽ dùng _preview.webp" : "Không có file _preview.webp";
+          lb.appendChild(chk);
+          const t = document.createElement("span");
+          t.textContent = "use preview";
+          lb.appendChild(t);
+          right.appendChild(lb);
+        }
+
+        row.appendChild(drag);
+        row.appendChild(meta);
+        row.appendChild(right);
+
+        // drag & drop handlers
+        row.addEventListener("dragstart", (e) => {
+          row.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", g.groupKey);
+        });
+        row.addEventListener("dragend", () => row.classList.remove("dragging"));
+        row.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        });
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          const fromKey = e.dataTransfer.getData("text/plain");
+          const toKey = row.dataset.key;
+          if (!fromKey || !toKey || fromKey === toKey) return;
+
+          // reorder in cfg.order
+          const arr = cfg.order.slice();
+          const fromIdx = arr.indexOf(fromKey);
+          const toIdx = arr.indexOf(toKey);
+          if (fromIdx < 0 || toIdx < 0) return;
+
+          arr.splice(fromIdx, 1);
+          arr.splice(toIdx, 0, fromKey);
+          cfg.order = arr;
+          ordersDoc.updatedAt = Math.floor(Date.now()/1000);
+
+          // re-render list with updated order
+          const ordered = applyOrder(folderName, groups);
+          renderList(folderName, ordered);
+        });
+
+        elList.appendChild(row);
+      }
+    }
+
+    async function loadFolders() {
+      setStatus("Loading folders... (requires token)");
+      elTitle.textContent = "Chọn folder";
+      elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}`;
+      elItemCount.textContent = "";
+      elList.innerHTML = "";
+      elFolderSettings.style.display = "none";
+
+      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
+      allFolders = data
+        .filter(x => x.type === "dir")
+        .map(x => ({ name: x.name, path: x.path }))
+        .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+      renderFolders(allFolders);
+      setStatus("");
+    }
+
+    async function openFolder(folderName) {
+      activeFolder = folderName;
+      renderFolders(allFolders);
+
+      elTitle.textContent = `📁 ${folderName}`;
+      elSubtitle.textContent = `${ROOT_DIR}/${folderName}`;
+      setStatus("Loading files...");
+      elList.innerHTML = "";
+
+      const data = await fetchJson(ghContentsUrl(`${ROOT_DIR}/${folderName}`), true);
+
+      activeFiles = data
+        .filter(x => x.type === "file")
+        .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
+        .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+      const groups = groupItemsFromFiles(folderName, activeFiles);
+      const ordered = applyOrder(folderName, groups);
+
+      setStatus("");
+      renderList(folderName, ordered);
+    }
+
+    async function loadOrdersJson() {
+      setStatus(`Loading ${ORDERS_PATH} ...`);
+      try {
+        const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
+        if (!meta?.content) throw new Error("No content");
+        const text = decodeURIComponent(escape(atob(meta.content.replace(/\n/g,""))));
+        const obj = JSON.parse(text);
+
+        ordersDoc = {
+          version: 1,
+          updatedAt: obj.updatedAt || 0,
+          folders: obj.folders || {}
+        };
+        setStatus(`✅ Loaded ${ORDERS_PATH}`);
+        if (activeFolder) {
+          // re-open folder to re-apply
+          await openFolder(activeFolder);
+        }
+      } catch (e) {
+        setStatus(`⚠️ Not found or invalid. Will use empty orders.\n${String(e?.message || e)}`);
+        ordersDoc = { version:1, updatedAt:0, folders:{} };
+      }
+    }
+
+    async function saveOrdersJson() {
+      ordersDoc.updatedAt = Math.floor(Date.now()/1000);
+      const text = JSON.stringify(ordersDoc, null, 2);
+
+      setStatus(`Saving ${ORDERS_PATH} ...`);
+      await upsertTextFile(ORDERS_PATH, text, `Update orders.json (${new Date().toISOString()})`);
+      setStatus(`✅ Saved ${ORDERS_PATH}`);
+    }
+
+    document.getElementById("reload").onclick = () => loadFolders();
+    document.getElementById("loadOrders").onclick = () => loadOrdersJson().catch(e => setStatus(String(e?.message || e)));
+    document.getElementById("saveOrders").onclick = () => saveOrdersJson().catch(e => setStatus(String(e?.message || e)));
+
+    document.getElementById("applyBaseCreatedAt").onclick = () => {
+      if (!activeFolder) return;
+      const cfg = ensureFolderConfig(activeFolder);
+      const v = parseInt(elBaseCreatedAt.value, 10);
+      if (!Number.isFinite(v) || v <= 0) return alert("baseCreatedAt không hợp lệ");
+      cfg.baseCreatedAt = v;
+      ordersDoc.updatedAt = Math.floor(Date.now()/1000);
+      alert("✅ Applied baseCreatedAt");
+    };
+
+    elQ.addEventListener("input", () => {
+      renderFolders(allFolders);
+      if (activeFolder) {
+        const groups = groupItemsFromFiles(activeFolder, activeFiles);
+        const ordered = applyOrder(activeFolder, groups);
+        renderList(activeFolder, ordered);
+      }
+    });
+
+    // init
+    (async () => {
+      try {
+        await loadFolders();
+        await loadOrdersJson(); // auto load if exists
+      } catch (e) {
+        setStatus(String(e?.message || e));
+      }
+    })();
+</script>
+</body>
+</html>
