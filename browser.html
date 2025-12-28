@@ -13,10 +13,11 @@
     header input[type="text"], header input[type="password"] {
       padding:8px 10px; border:1px solid var(--bd); border-radius:10px; min-width:220px;
     }
-    header button {
+    header button, header a.btn {
       padding:8px 10px; border:1px solid var(--bd); background:#fff; border-radius:10px; cursor:pointer;
+      text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
     }
-    header button:hover { background:#f5f5f5; }
+    header button:hover, header a.btn:hover { background:#f5f5f5; }
     label.mut { display:inline-flex; gap:6px; align-items:center; }
     input[type="checkbox"] { transform: translateY(1px); }
 
@@ -44,6 +45,7 @@
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .danger { border-color:#f0c1c1 !important; }
 
+    .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
     a.btn{
       border:1px solid var(--bd); background:#fff; padding:8px 10px; border-radius:10px;
       cursor:pointer; text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
@@ -72,7 +74,8 @@
   <button id="reload">Reload</button>
 
   <a class="btn" href="./orders.html" target="_blank" rel="noreferrer">🧩 Orders</a>
-  <button id="genAll">🧾 Generate JSON (ALL)</button>
+  <button id="genFolderJson">🧾 Generate folder JSON</button>
+  <button id="genAllJson">🧾 Generate ALL JSON</button>
 
   <span class="mut" id="rate"></span>
 </header>
@@ -106,14 +109,13 @@
    *  ========================= */
   const OWNER = "tramiune";
   const REPO  = "tramiune001_res_wallpaper";
-  const BRANCH = "main";           // đổi nếu repo bạn là master
+  const BRANCH = "main";
   const ROOT_DIR = "resources";
 
-  // output JSON
-  const OUT_JSON_PATH = "dev/wallpaper.json";
-  const ORDERS_PATH   = "dev/orders.json";
+  // Nơi ghi file json tổng (merge)
+  const MERGED_JSON_PATH = "dev/wallpaper.json";
 
-  // CDN url trong JSON output (theo format bạn đang dùng)
+  // CDN để gen url trong JSON (app bạn đang dùng)
   const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
   const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
@@ -142,6 +144,7 @@
   const MAX_CACHE = 120;
 
   function setStatus(s) { elStatus.textContent = s || ""; }
+
   function extOf(name) {
     const i = name.lastIndexOf(".");
     return i >= 0 ? name.slice(i+1).toLowerCase() : "";
@@ -181,22 +184,22 @@
   }
 
   /** remember token (localStorage) */
-  const LS_KEY = `wallpaper_browser_token_${OWNER}_${REPO}`;
+  const LS_TOKEN = `wallpaper_browser_token_${OWNER}_${REPO}`;
   (function initRememberToken(){
-    const saved = localStorage.getItem(LS_KEY);
+    const saved = localStorage.getItem(LS_TOKEN);
     if (saved) {
       elToken.value = saved;
       elRemember.checked = true;
     }
     elRemember.addEventListener("change", () => {
       if (elRemember.checked) {
-        if (elToken.value.trim()) localStorage.setItem(LS_KEY, elToken.value.trim());
+        if (elToken.value.trim()) localStorage.setItem(LS_TOKEN, elToken.value.trim());
       } else {
-        localStorage.removeItem(LS_KEY);
+        localStorage.removeItem(LS_TOKEN);
       }
     });
     elToken.addEventListener("input", () => {
-      if (elRemember.checked) localStorage.setItem(LS_KEY, elToken.value.trim());
+      if (elRemember.checked) localStorage.setItem(LS_TOKEN, elToken.value.trim());
     });
   })();
 
@@ -215,16 +218,17 @@
     if (!dl) throw new Error(`No download_url for ${filePath}`);
 
     // tải blob
-    const res = await fetch(dl, { headers: { "Authorization": `Bearer ${token}` } }).catch(() => fetch(dl));
+    let res = await fetch(dl, { headers: { "Authorization": `Bearer ${token}` } }).catch(() => null);
+    if (!res || !res.ok) res = await fetch(dl);
     if (!res.ok) {
       const txt = await res.text().catch(()=> "");
       throw new Error(`Download failed: HTTP ${res.status}\n${txt}`);
     }
+
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
 
     blobUrlCache.set(key, { url, ts: Date.now() });
-    // giới hạn cache
     if (blobUrlCache.size > MAX_CACHE) {
       const oldestKey = [...blobUrlCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0]?.[0];
       if (oldestKey) {
@@ -275,7 +279,6 @@
   async function deleteFileFlow(f) {
     if (!activeFolder) return;
     const filePath = `${ROOT_DIR}/${activeFolder}/${f.name}`;
-
     const ok = confirm(`Xoá file khỏi GitHub?\n\n${filePath}\n\n⚠️ Không undo được (trừ khi bạn git revert).`);
     if (!ok) return;
 
@@ -284,6 +287,403 @@
 
     setStatus(`✅ Deleted\n${filePath}`);
     await openFolder(activeFolder);
+  }
+
+  /** =========================
+   *  ORDERS CONFIG (from orders.html)
+   *  ========================= */
+  const LS_ORDERS = `wallpaper_orders_${OWNER}_${REPO}`;
+  function loadOrdersConfig() {
+    try {
+      const raw = localStorage.getItem(LS_ORDERS);
+      if (!raw) return {};
+      const obj = JSON.parse(raw);
+      return obj && typeof obj === "object" ? obj : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** =========================
+   *  JSON GENERATOR
+   *  ========================= */
+  function pad3(n) { return String(n).padStart(3, "0"); }
+
+  function isValidStillLiveBase(base) {
+    // only allow prefix_### to become item
+    return /^.+?_\d{3}$/i.test(base);
+  }
+
+  function cdnUrl(folder, file) {
+    return `${CDN_BASE}${folder}/${file}`;
+  }
+
+  function contentTypeFor(name) {
+    const e = extOf(name);
+    if (VIDEO_EXT.includes(e)) return "video/mp4";
+    if (e === "webp") return "image/webp";
+    if (e === "png") return "image/png";
+    if (e === "jpg" || e === "jpeg") return "image/jpeg";
+    if (e === "gif") return "image/gif";
+    return "application/octet-stream";
+  }
+
+  function buildItemsForFolder(folderName, files) {
+    const cfg = loadOrdersConfig()[folderName] || {};
+    const order = Array.isArray(cfg.order) ? cfg.order : [];          // ["101_anime_003", ...]
+    const livePreview = cfg.livePreview || {};                        // { "101_anime_003": true/false }
+    const baseCreatedAt = Number.isFinite(cfg.baseCreatedAt) ? cfg.baseCreatedAt : Math.floor(Date.now()/1000);
+
+    const fileSet = new Set(files.map(x => x.name));
+
+    // Index helpers
+    const previewByBase = new Map(); // baseWebpName -> previewName
+    for (const name of fileSet) {
+      if (!name.endsWith(".webp")) continue;
+      if (!name.includes("_preview.webp")) continue;
+      const base = name.replace("_preview.webp", ".webp");
+      previewByBase.set(base, name);
+    }
+
+    // Groups
+    const groups = new Map(); // key: id -> { type, n, ... }
+    const ensure = (id, init) => {
+      if (!groups.has(id)) groups.set(id, init);
+      return groups.get(id);
+    };
+
+    // DOUBLE: double_###_0.webp + double_###_1.webp
+    for (const name of fileSet) {
+      const m = name.match(/^double_(\d{3})_(0|1)\.webp$/i);
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      const id = `${folderName}_${m[1]}`;
+      const g = ensure(id, { type: 2, n, medias: [] });
+      g.medias.push({ name, part: Number(m[2]) });
+    }
+
+    // DAYS: days_###_6h.webp / 12h / 18h / 24h
+    const hourMap = { "6h":"06:00", "12h":"12:00", "18h":"18:00", "24h":"24:00" };
+    for (const name of fileSet) {
+      const m = name.match(/^days_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      const id = `${folderName}_${m[1]}`;
+      const g = ensure(id, { type: 3, n, medias: [] });
+      g.medias.push({ name, hour: hourMap[m[2]] || "" });
+    }
+
+    // COUPLE: couple_###.webp (+ optional couple_###_preview.webp)
+    for (const name of fileSet) {
+      const m = name.match(/^couple_(\d{3})\.webp$/i);
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      const id = `${folderName}_${m[1]}`;
+      ensure(id, { type: 4, n, baseWebp: name });
+    }
+
+    // LIVE/STILL: prefix_###.mp4 + prefix_###.webp
+    // IMPORTANT: ignore couple_###_0.webp etc (don’t let them fall into still)
+    const baseMap = new Map(); // base -> { mp4?, webp? }
+    for (const name of fileSet) {
+      const e = extOf(name);
+      if (e !== "mp4" && e !== "webp") continue;
+
+      const base = name.slice(0, name.lastIndexOf("."));
+      if (/^couple_\d{3}_.+/i.test(base)) continue;        // ignore couple_001_0, couple_001_1...
+      if (/^double_\d{3}_.+/i.test(name)) continue;
+      if (/^days_\d{3}_.+/i.test(name)) continue;
+      if (name.includes("_preview.")) continue;
+
+      if (!isValidStillLiveBase(base)) continue;
+
+      const rec = baseMap.get(base) || { mp4:false, webp:false, base };
+      if (e === "mp4") rec.mp4 = true;
+      if (e === "webp") rec.webp = true;
+      baseMap.set(base, rec);
+    }
+
+    for (const rec of baseMap.values()) {
+      // derive number
+      const m = rec.base.match(/_(\d{3})$/);
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      const id = `${folderName}_${m[1]}`;
+
+      // don't override if it already is DOUBLE/DAYS/COUPLE
+      if (groups.has(id)) continue;
+
+      // LIVE if has mp4 + webp. STILL if only webp.
+      if (rec.webp) {
+        ensure(id, {
+          type: rec.mp4 ? 0 : 1,
+          n,
+          base: rec.base,
+          webpName: `${rec.base}.webp`,
+          mp4Name: rec.mp4 ? `${rec.base}.mp4` : null
+        });
+      }
+    }
+
+    // Convert to items
+    const items = [];
+    const seenId = new Set();
+
+    // ordering helper
+    const orderIndex = new Map();
+    order.forEach((id, idx) => orderIndex.set(id, idx));
+
+    const sorted = [...groups.entries()].map(([id, g]) => ({ id, ...g }))
+      .sort((a,b) => {
+        const ia = orderIndex.has(a.id) ? orderIndex.get(a.id) : 1e9;
+        const ib = orderIndex.has(b.id) ? orderIndex.get(b.id) : 1e9;
+        if (ia !== ib) return ia - ib;
+        return (a.n ?? 0) - (b.n ?? 0);
+      });
+
+    let t = 0;
+    for (const g of sorted) {
+      if (seenId.has(g.id)) continue;
+      seenId.add(g.id);
+
+      const createdAt = baseCreatedAt + (t++);
+      const base = g.id.replace(`${folderName}_`, ""); // "003" etc
+
+      if (g.type === 2) {
+        // double
+        const medias = (g.medias || [])
+          .sort((x,y)=> (x.part ?? 0) - (y.part ?? 0))
+          .map(x => ({
+            url: cdnUrl(folderName, x.name),
+            name: x.name,
+            thumbUrl: "",
+            contentType: "image/webp"
+          }));
+
+        // only accept when has >=2 (avoid half item)
+        if (medias.length < 2) continue;
+
+        items.push({
+          id: g.id,
+          medias,
+          categoryId: folderName,
+          isPremium: true,
+          createdAt,
+          subType: 0,
+          type: 2,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+
+      if (g.type === 3) {
+        // days
+        const medias = (g.medias || [])
+          .filter(x => x.hour)
+          .sort((a,b)=> a.hour.localeCompare(b.hour))
+          .map(x => ({
+            url: cdnUrl(folderName, x.name),
+            name: x.name,
+            thumbUrl: "",
+            hour: x.hour,
+            contentType: "image/webp"
+          }));
+
+        if (medias.length < 4) continue;
+
+        items.push({
+          id: g.id,
+          medias,
+          categoryId: folderName,
+          isPremium: true,
+          createdAt,
+          subType: 0,
+          type: 3,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+
+      if (g.type === 4) {
+        // couple
+        const webp = g.baseWebp;
+        const preview = previewByBase.get(webp) || "";
+        items.push({
+          id: g.id,
+          medias: [{
+            url: cdnUrl(folderName, webp),
+            name: webp,
+            thumbUrl: preview ? cdnUrl(folderName, preview) : "",
+            contentType: "image/webp"
+          }],
+          categoryId: folderName,
+          isPremium: true,
+          createdAt,
+          subType: 0,
+          type: 4,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+
+      if (g.type === 1) {
+        // still
+        const webp = g.webpName;
+        if (!fileSet.has(webp)) continue;
+        items.push({
+          id: g.id,
+          medias: [{
+            url: cdnUrl(folderName, webp),
+            name: webp,
+            thumbUrl: "",
+            contentType: "image/webp"
+          }],
+          categoryId: folderName,
+          isPremium: true,
+          createdAt,
+          subType: 0,
+          type: 1,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+
+      if (g.type === 0) {
+        // live
+        const mp4 = g.mp4Name;
+        const webp = g.webpName;
+        if (!mp4 || !fileSet.has(mp4) || !fileSet.has(webp)) continue;
+
+        const preview = previewByBase.get(webp) || "";
+        const includePreview = (livePreview[g.id] !== false); // default true
+        const thumbUrl = (includePreview && preview) ? cdnUrl(folderName, preview) : "";
+
+        items.push({
+          id: g.id,
+          medias: [
+            { url: cdnUrl(folderName, mp4), name: mp4, thumbUrl: "", contentType: "video/mp4" },
+            { url: cdnUrl(folderName, webp), name: webp, thumbUrl, contentType: "image/webp" }
+          ],
+          categoryId: folderName,
+          isPremium: true,
+          createdAt,
+          subType: 0,
+          type: 0,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+    }
+
+    return items;
+  }
+
+  function base64Utf8(str) {
+    // safe base64 for unicode
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  async function putFileToGitHub(path, contentText) {
+    const token = getAuthToken();
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
+
+    // check existing to get sha
+    let sha = null;
+    try {
+      const meta = await fetchJson(`${url}?ref=${encodeURIComponent(BRANCH)}`, true);
+      sha = meta?.sha || null;
+    } catch (_) {}
+
+    const body = {
+      message: `Update ${path}`,
+      content: base64Utf8(contentText),
+      branch: BRANCH
+    };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> "");
+      throw new Error(`PUT failed: HTTP ${res.status}\n${txt}`);
+    }
+  }
+
+  async function generateFolderJson(folderName) {
+    if (!folderName) throw new Error("Bạn chưa chọn folder.");
+    const folderFiles = activeFiles?.length ? activeFiles : await loadFilesOfFolder(folderName);
+    const items = buildItemsForFolder(folderName, folderFiles);
+
+    const json = JSON.stringify(items, null, 2);
+    const outPath = `${ROOT_DIR}/${folderName}/${folderName}.json`;
+
+    setStatus(`Generating folder JSON...\n${outPath}\nitems=${items.length}`);
+    await putFileToGitHub(outPath, json);
+    setStatus(`✅ Done\n${outPath}\nitems=${items.length}`);
+  }
+
+  async function loadFilesOfFolder(folderName) {
+    const data = await fetchJson(ghContentsUrl(`${ROOT_DIR}/${folderName}`), true);
+    return data
+      .filter(x => x.type === "file")
+      .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
+      .sort((a,b) => a.name.localeCompare(b.name, "en"));
+  }
+
+  async function generateAllJsonMerged() {
+    const folders = allFolders
+      .map(x => x.name)
+      .filter(name => /^\d+_/.test(name)); // only numeric prefix folders
+
+    if (!folders.length) throw new Error("Không thấy folder dạng 101_..., 102_...");
+
+    setStatus(`Generating ALL JSON...\nfolders=${folders.length}\nOutput: ${MERGED_JSON_PATH}`);
+
+    const allItems = [];
+    const seen = new Set();
+    const dup = [];
+
+    for (let i=0; i<folders.length; i++) {
+      const folder = folders[i];
+      setStatus(`Generating ALL JSON...\n[${i+1}/${folders.length}] ${folder}`);
+
+      const files = (activeFolder === folder && activeFiles?.length)
+        ? activeFiles
+        : await loadFilesOfFolder(folder);
+
+      const items = buildItemsForFolder(folder, files);
+      for (const it of items) {
+        if (seen.has(it.id)) {
+          dup.push(it.id);
+          continue;
+        }
+        seen.add(it.id);
+        allItems.push(it);
+      }
+    }
+
+    // optional: sort by category then id
+    allItems.sort((a,b) => {
+      if (a.categoryId !== b.categoryId) return a.categoryId.localeCompare(b.categoryId);
+      return a.id.localeCompare(b.id);
+    });
+
+    const json = JSON.stringify(allItems, null, 2);
+    await putFileToGitHub(MERGED_JSON_PATH, json);
+
+    if (dup.length) {
+      setStatus(`✅ Done\n${MERGED_JSON_PATH}\nitems=${allItems.length}\n⚠️ Duplicates skipped:\n${dup.slice(0,50).join(", ")}${dup.length>50 ? "\n..." : ""}`);
+    } else {
+      setStatus(`✅ Done\n${MERGED_JSON_PATH}\nitems=${allItems.length}`);
+    }
   }
 
   /** ---------- GRID ---------- */
@@ -344,10 +744,7 @@
       `;
 
       const actions = document.createElement("div");
-      actions.style.display = "flex";
-      actions.style.gap = "8px";
-      actions.style.flexWrap = "wrap";
-      actions.style.marginTop = "8px";
+      actions.className = "actions";
 
       // open file (blob)
       const openBtn = document.createElement("a");
@@ -385,7 +782,7 @@
         actions.appendChild(editBtn);
       }
 
-      // update image from mp4 (GIỮ NGUYÊN)
+      // update image from mp4 (GIỮ NÚT UPDATE CỦA BẠN)
       const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
       if (isNormalWebp) {
         const base = f.name.slice(0, f.name.lastIndexOf("."));
@@ -445,7 +842,6 @@
     elItemCount.textContent = "";
     elGrid.innerHTML = "";
 
-    // API-only => dùng auth
     const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
 
     allFolders = data
@@ -466,8 +862,7 @@
     setStatus("Loading files...");
     elGrid.innerHTML = "";
 
-    const path = `${ROOT_DIR}/${folderName}`;
-    const data = await fetchJson(ghContentsUrl(path), true);
+    const data = await fetchJson(ghContentsUrl(`${ROOT_DIR}/${folderName}`), true);
 
     activeFiles = data
       .filter(x => x.type === "file")
@@ -479,403 +874,24 @@
   }
 
   document.getElementById("reload").onclick = () => loadFolders();
+
   elQ.addEventListener("input", () => {
     renderFolders(allFolders);
     if (activeFolder) renderGrid(activeFiles);
   });
+
   elShowPreview.addEventListener("change", () => {
     if (activeFolder) renderGrid(activeFiles);
   });
 
-  /** =========================
-   *  GENERATE JSON (ALL)
-   *  ========================= */
+  document.getElementById("genFolderJson").onclick = async () => {
+    try { await generateFolderJson(activeFolder); }
+    catch (e) { alert(String(e?.message || e)); }
+  };
 
-  function mainPrefixOfFolder(folderName) {
-    return folderName.replace(/^\d+_/, "");
-  }
-  function parseBaseKey(fileName) {
-    const dot = fileName.lastIndexOf(".");
-    let base = dot >= 0 ? fileName.slice(0, dot) : fileName;
-    base = base.replace(/_preview$/i, "");
-    return base;
-  }
-  function mediaUrl(folderName, fileName) {
-    return `${CDN_BASE}${folderName}/${fileName}`;
-  }
-
-  async function getFileShaIfExists(path) {
-    try {
-      const meta = await fetchJson(ghContentsUrl(path), true);
-      return meta?.sha || null;
-    } catch (e) {
-      const msg = String(e?.message || e);
-      if (msg.includes("404")) return null;
-      return null;
-    }
-  }
-
-  async function upsertTextFile(path, text, commitMsg) {
-    const token = getAuthToken();
-    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
-    const sha = await getFileShaIfExists(path);
-
-    const body = {
-      message: commitMsg || `Update ${path}`,
-      content: btoa(unescape(encodeURIComponent(text))),
-      branch: BRANCH
-    };
-    if (sha) body.sha = sha;
-
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> "");
-      throw new Error(`PUT failed: HTTP ${res.status}\n${txt}`);
-    }
-    return res.json();
-  }
-
-  async function loadOrdersDoc() {
-    try {
-      const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
-      if (!meta?.content) return { version:1, updatedAt:0, folders:{} };
-      const text = decodeURIComponent(escape(atob(meta.content.replace(/\n/g,""))));
-      const obj = JSON.parse(text);
-      return {
-        version: 1,
-        updatedAt: obj.updatedAt || 0,
-        folders: obj.folders || {}
-      };
-    } catch {
-      return { version:1, updatedAt:0, folders:{} };
-    }
-  }
-
-  function ensureFolderCfg(ordersDoc, folderName) {
-    const now = Math.floor(Date.now()/1000);
-    ordersDoc.folders[folderName] ??= { baseCreatedAt: now, order: [], liveUsePreview: {} };
-    ordersDoc.folders[folderName].baseCreatedAt ??= now;
-    ordersDoc.folders[folderName].order ??= [];
-    ordersDoc.folders[folderName].liveUsePreview ??= {};
-    return ordersDoc.folders[folderName];
-  }
-
-  function groupItemsFromFiles(folderName, files, folderCfg) {
-    const previewForWebp = new Map(); // base.webp -> base_preview.webp
-    for (const f of files) {
-      if (isPreviewName(f.name) && extOf(f.name) === "webp") {
-        const base = f.name.replace("_preview.webp", ".webp");
-        previewForWebp.set(base, f.name);
-      }
-    }
-
-    const groups = new Map();
-    const mainPrefix = mainPrefixOfFolder(folderName);
-
-    function ensureGroup(groupKey, init) {
-      if (!groups.has(groupKey)) groups.set(groupKey, Object.assign({ groupKey }, init || {}));
-      return groups.get(groupKey);
-    }
-
-    for (const f of files) {
-      if (!isMediaFile(f.name)) continue;
-      const e = extOf(f.name);
-      const base = parseBaseKey(f.name);
-
-      // DOUBLE
-      const mDouble = base.match(/^(double_\d{3})_(0|1)$/i);
-      if (mDouble && e === "webp") {
-        const key = mDouble[1];
-        const g = ensureGroup(key, { type: 2, medias: [] });
-        g.medias.push({ name: f.name });
-        continue;
-      }
-
-      // DAYS
-      const mDays = base.match(/^(days_\d{3})_(\d{1,2})h$/i);
-      if (mDays && e === "webp") {
-        const key = mDays[1];
-        const hourNum = parseInt(mDays[2], 10);
-        const hour = String(hourNum).padStart(2, "0") + ":00";
-        const g = ensureGroup(key, { type: 3, medias: [] });
-        g.medias.push({ name: f.name, hour });
-        continue;
-      }
-
-      // COUPLE
-      const mCouple = base.match(/^(couple_\d{3})$/i);
-      if (mCouple && e === "webp") {
-        const key = mCouple[1];
-        const g = ensureGroup(key, { type: 4, medias: [] });
-        g.medias.push({ name: f.name });
-        continue;
-      }
-
-      // LIVE/STILL
-      if (e === "mp4" || e === "webp") {
-        const g = ensureGroup(base, { type: 1, names: new Set() });
-        g.names.add(f.name);
-        continue;
-      }
-    }
-
-    const out = [];
-
-    for (const g of groups.values()) {
-      if (g.type === 2) {
-        g.medias.sort((a,b)=>a.name.localeCompare(b.name,"en"));
-        // id: folder_<num>
-        const mm = g.groupKey.match(/^double_(\d{3})$/i);
-        const num = mm ? mm[1] : g.groupKey;
-        g.id = `${folderName}_${num}`;
-        out.push(g);
-        continue;
-      }
-
-      if (g.type === 3) {
-        // sort by hour
-        g.medias.sort((a,b)=>String(a.hour).localeCompare(String(b.hour),"en"));
-        const mm = g.groupKey.match(/^days_(\d{3})$/i);
-        const num = mm ? mm[1] : g.groupKey;
-        g.id = `${folderName}_${num}`;
-        out.push(g);
-        continue;
-      }
-
-      if (g.type === 4) {
-        const mm = g.groupKey.match(/^couple_(\d{3})$/i);
-        const num = mm ? mm[1] : g.groupKey;
-        g.id = `${folderName}_${num}`;
-        out.push(g);
-        continue;
-      }
-
-      // LIVE/STILL decide by existence
-      const base = g.groupKey;
-      const mp4 = `${base}.mp4`;
-      const webp = `${base}.webp`;
-      const hasMp4 = g.names.has(mp4);
-      const hasWebp = g.names.has(webp);
-      if (!hasWebp) continue;
-
-      const isLive = hasMp4;
-      g.type = isLive ? 0 : 1;
-
-      // id rule anti-dup:
-      let id = "";
-      const mm = base.match(/^(.+?)_(\d{3})$/);
-      if (mm) {
-        const prefix = mm[1];
-        const num = mm[2];
-        if (prefix === mainPrefix) id = `${folderName}_${num}`;
-        else id = `${folderName}_${prefix}_${num}`;
-      } else {
-        id = `${folderName}_${base}`;
-      }
-      g.id = id;
-
-      const previewName = previewForWebp.get(webp) || "";
-      g.preview = previewName;
-      g.baseKey = base;
-
-      // keep a normalized media list
-      g.medias = [];
-      if (isLive) g.medias.push({ name: mp4 });
-      g.medias.push({ name: webp });
-
-      // live usePreview choice
-      if (isLive) {
-        // default: if has preview => true
-        const v = folderCfg.liveUsePreview?.[base];
-        g.usePreview = (v == null) ? !!previewName : !!v;
-      }
-
-      out.push(g);
-    }
-
-    // Apply order from folderCfg.order (list of groupKey)
-    const byKey = new Map(out.map(x => [x.groupKey, x]));
-    const ordered = [];
-    const orderArr = Array.isArray(folderCfg.order) ? folderCfg.order : [];
-    for (const k of orderArr) {
-      if (byKey.has(k)) {
-        ordered.push(byKey.get(k));
-        byKey.delete(k);
-      }
-    }
-    for (const x of out) if (byKey.has(x.groupKey)) ordered.push(x);
-
-    // refresh order list
-    folderCfg.order = ordered.map(x => x.groupKey);
-
-    return ordered;
-  }
-
-  function buildJsonItemsForFolder(folderName, groups, folderCfg) {
-    const baseCreatedAt = Number(folderCfg.baseCreatedAt || Math.floor(Date.now()/1000));
-    const items = [];
-
-    for (let i=0;i<groups.length;i++) {
-      const g = groups[i];
-      const createdAt = baseCreatedAt + i;
-      const categoryId = folderName;
-
-      // medias
-      const medias = [];
-      if (g.type === 0) {
-        // LIVE: mp4 + webp, thumbUrl = preview nếu tick + có preview
-        const mp4Name = g.medias.find(x=>x.name.endsWith(".mp4"))?.name;
-        const webpName = g.medias.find(x=>x.name.endsWith(".webp"))?.name;
-
-        if (mp4Name) medias.push({
-          url: mediaUrl(folderName, mp4Name),
-          name: mp4Name,
-          thumbUrl: "",
-          contentType: "video/mp4"
-        });
-        if (webpName) medias.push({
-          url: mediaUrl(folderName, webpName),
-          name: webpName,
-          thumbUrl: (g.usePreview && g.preview) ? mediaUrl(folderName, g.preview) : "",
-          contentType: "image/webp"
-        });
-      } else if (g.type === 1) {
-        // STILL: 1 webp
-        const webpName = g.medias.find(x=>x.name.endsWith(".webp"))?.name || `${g.groupKey}.webp`;
-        medias.push({
-          url: mediaUrl(folderName, webpName),
-          name: webpName,
-          thumbUrl: "",
-          contentType: "image/webp"
-        });
-      } else if (g.type === 4) {
-        // COUPLE: 1 webp (optional preview if exists)
-        const webp = g.medias[0]?.name;
-        const preview = webp ? webp.replace(".webp","_preview.webp") : "";
-        medias.push({
-          url: mediaUrl(folderName, webp),
-          name: webp,
-          thumbUrl: (preview && g.preview !== false && isPreviewName(preview)) ? mediaUrl(folderName, preview) : "",
-          contentType: "image/webp"
-        });
-      } else if (g.type === 2) {
-        // DOUBLE: 2 webp
-        for (const m of g.medias) {
-          medias.push({
-            url: mediaUrl(folderName, m.name),
-            name: m.name,
-            thumbUrl: "",
-            contentType: "image/webp"
-          });
-        }
-      } else if (g.type === 3) {
-        // DAYS: multiple webp + hour
-        for (const m of g.medias) {
-          medias.push({
-            url: mediaUrl(folderName, m.name),
-            name: m.name,
-            thumbUrl: "",
-            hour: m.hour,
-            contentType: "image/webp"
-          });
-        }
-      }
-
-      items.push({
-        id: g.id,
-        medias,
-        categoryId,
-        isPremium: true,
-        createdAt,
-        subType: 0,
-        type: g.type,
-        coinToUnlock: 0
-      });
-    }
-    return items;
-  }
-
-  document.getElementById("genAll").onclick = async () => {
-    try {
-      const ok = confirm(`Generate JSON ALL folders dạng "###_*" và upload vào:\n\n${OUT_JSON_PATH}\n\nOK?`);
-      if (!ok) return;
-
-      setStatus("Loading orders.json...");
-      const ordersDoc = await loadOrdersDoc();
-
-      setStatus("Listing folders...");
-      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
-      const folders = data
-        .filter(x => x.type === "dir")
-        .map(x => x.name)
-        .filter(name => /^\d+_/.test(name))      // chỉ folder dạng 101_...
-        .sort((a,b)=>a.localeCompare(b,"en"));
-
-      const allItems = [];
-      const usedIds = new Set();
-
-      for (const folderName of folders) {
-        setStatus(`Reading folder: ${folderName} ...`);
-        const folderCfg = ensureFolderCfg(ordersDoc, folderName);
-
-        const list = await fetchJson(ghContentsUrl(`${ROOT_DIR}/${folderName}`), true);
-        const files = list
-          .filter(x => x.type === "file")
-          .map(x => ({ name: x.name }))
-          .sort((a,b)=>a.name.localeCompare(b.name,"en"));
-
-        const groups = groupItemsFromFiles(folderName, files, folderCfg);
-        const items = buildJsonItemsForFolder(folderName, groups, folderCfg);
-
-        // ensure unique IDs globally
-        for (const it of items) {
-          let id = it.id;
-          if (!usedIds.has(id)) {
-            usedIds.add(id);
-          } else {
-            // add suffix _dupN
-            let n = 2;
-            while (usedIds.has(`${id}_dup${n}`)) n++;
-            it.id = `${id}_dup${n}`;
-            usedIds.add(it.id);
-          }
-          allItems.push(it);
-        }
-      }
-
-      // update orders.json too (because order arrays might be auto-filled)
-      ordersDoc.updatedAt = Math.floor(Date.now()/1000);
-
-      setStatus(`Uploading ${OUT_JSON_PATH} ...`);
-      await upsertTextFile(
-        OUT_JSON_PATH,
-        JSON.stringify(allItems, null, 2),
-        `Generate wallpaper.json (${new Date().toISOString()})`
-      );
-
-      // optional: also save refreshed orders.json (so new groups appended)
-      setStatus(`Uploading ${ORDERS_PATH} (refresh) ...`);
-      await upsertTextFile(
-        ORDERS_PATH,
-        JSON.stringify(ordersDoc, null, 2),
-        `Refresh orders.json (${new Date().toISOString()})`
-      );
-
-      setStatus(`✅ Done!\nGenerated ${allItems.length} items\nSaved:\n- ${OUT_JSON_PATH}\n- ${ORDERS_PATH}`);
-      alert("✅ Generate JSON ALL done!");
-    } catch (e) {
-      setStatus(`❌ Generate failed\n${String(e?.message || e)}`);
-      alert(String(e?.message || e));
-    }
+  document.getElementById("genAllJson").onclick = async () => {
+    try { await generateAllJsonMerged(); }
+    catch (e) { alert(String(e?.message || e)); }
   };
 
   loadFolders().catch(err => setStatus(String(err?.message || err)));
