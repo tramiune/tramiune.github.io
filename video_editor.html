@@ -68,12 +68,12 @@
                 <span class="k" id="scrubVal">0.000</span>
             </label>
 
-            <div class="warn" id="corsNote" style="display:none"></div>
+            <div class="warn" id="note" style="display:none"></div>
         </div>
     </div>
 
     <div class="card">
-        <div class="hd">Frame → webp (replace) + Trim video (MP4 replace)</div>
+        <div class="hd">Frame → webp (replace) + Trim MP4 (replace)</div>
         <div class="ct">
             <div class="mut">Frame preview (canvas):</div>
             <canvas id="c"></canvas>
@@ -108,13 +108,12 @@
 
             <div class="row" style="margin-top:10px">
                 <button id="apply">Apply speed to preview</button>
-                <button id="exportTrimWebm">✂️ Export trimmed (WEBM lite)</button>
                 <button id="replaceTrimMp4">♻️ Trim & Replace MP4 on GitHub</button>
             </div>
 
             <div class="warn" style="margin-top:10px">
-                <b>Trim & Replace MP4</b> dùng FFmpeg WASM <b>single-thread</b> (không cần SharedArrayBuffer).<br/>
-                FAST = nhanh (có thể lệch chút nếu không trúng keyframe). PRECISE = chuẩn hơn nhưng chậm.
+                Fix GitHub Pages: polyfill SharedArrayBuffer để FFmpeg không crash.<br/>
+                FAST = nhanh (copy stream, có thể lệch chút nếu không trúng keyframe). PRECISE = chuẩn hơn nhưng chậm.
             </div>
 
             <div class="status" id="status"></div>
@@ -122,11 +121,17 @@
     </div>
 </main>
 
-if (typeof SharedArrayBuffer === "undefined") {
-window.SharedArrayBuffer = ArrayBuffer;
-}
-<!-- ✅ FFmpeg single-thread (không cần SharedArrayBuffer) -->
+<!-- ✅ Polyfill to stop crash "SharedArrayBuffer is not defined" on GH Pages -->
+<script>
+    if (typeof SharedArrayBuffer === "undefined") {
+      // FFmpeg single-thread doesn't really need SAB, some builds just reference it.
+      window.SharedArrayBuffer = ArrayBuffer;
+    }
+</script>
+
+<!-- ✅ FFmpeg single-thread bundle -->
 <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js"></script>
+
 <script>
     /** Repo config */
     const OWNER = "tramiune";
@@ -140,8 +145,8 @@ window.SharedArrayBuffer = ArrayBuffer;
     const ctx = c.getContext("2d", { willReadFrequently: false });
 
     const info = document.getElementById("info");
+    const noteEl = document.getElementById("note");
     const statusEl = document.getElementById("status");
-    const corsNote = document.getElementById("corsNote");
     const tEl = document.getElementById("t");
     const durEl = document.getElementById("dur");
     const scrub = document.getElementById("scrub");
@@ -157,11 +162,11 @@ window.SharedArrayBuffer = ArrayBuffer;
     const rememberEl = document.getElementById("remember");
 
     function setStatus(s){ statusEl.textContent = s || ""; }
-    function setWarn(s){
-      if (!s) { corsNote.style.display = "none"; corsNote.textContent = ""; return; }
-      corsNote.style.display = "block";
-      corsNote.textContent = s;
+    function setNote(s){
+      if (!s){ noteEl.style.display="none"; noteEl.textContent=""; return; }
+      noteEl.style.display="block"; noteEl.textContent=s;
     }
+
     function qs() {
       const p = new URLSearchParams(location.search);
       return {
@@ -171,6 +176,8 @@ window.SharedArrayBuffer = ArrayBuffer;
         target: p.get("target") || ""
       };
     }
+
+    function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
     function mediaUrlCdn(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
     function baseName(file){
       const i = file.lastIndexOf(".");
@@ -225,9 +232,7 @@ window.SharedArrayBuffer = ArrayBuffer;
       if (!t) throw new Error("Bạn chưa nhập GitHub token (Contents: write).");
       return t;
     }
-    function encodePath(path) {
-      return path.split("/").map(encodeURIComponent).join("/");
-    }
+
     async function ghGetJson(url, token) {
       const res = await fetch(url, {
         headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
@@ -285,14 +290,14 @@ window.SharedArrayBuffer = ArrayBuffer;
       setStatus(`✅ Replaced on GitHub\n${filePath}`);
     }
 
-    /** Load video as Blob via GitHub API (no CORS/taint) */
+    /** Load video as Blob via GitHub API (avoid CORS taint) */
     async function loadVideoViaGitHubApi(folder, fileName) {
       const token = getAuthToken();
       const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
       const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
       setStatus(`Fetching video via GitHub API...\n${filePath}`);
       const meta = await ghGetJson(url, token);
-      if (!meta?.download_url) throw new Error("Không có download_url (file private?)");
+      if (!meta?.download_url) throw new Error("Không có download_url.");
       const res = await fetch(meta.download_url);
       if (!res.ok) {
         const txt = await res.text().catch(()=> "");
@@ -304,7 +309,7 @@ window.SharedArrayBuffer = ArrayBuffer;
       return blobUrl;
     }
 
-    /** UI actions */
+    /** ========== UI actions ========== */
     speedEl.addEventListener("input", ()=> speedVal.textContent = `${Number(speedEl.value).toFixed(1)}x`);
     document.getElementById("apply").onclick = ()=> { v.playbackRate = Number(speedEl.value) || 1; };
 
@@ -336,8 +341,8 @@ window.SharedArrayBuffer = ArrayBuffer;
       try {
         const { video } = qs();
         const out = `${baseName(video)}_preview.webp`;
-        drawFrameToCanvas();
 
+        drawFrameToCanvas();
         const targetW = 360;
         const scale = targetW / c.width;
         const w = Math.max(1, Math.round(c.width * scale));
@@ -349,7 +354,7 @@ window.SharedArrayBuffer = ArrayBuffer;
 
         setStatus(`Capturing preview...\n→ ${out}`);
         const blob = await new Promise(resolve => tmp.toBlob(resolve, "image/webp", 0.85));
-        if (!blob) throw new Error("toBlob failed (webp not supported?)");
+        if (!blob) throw new Error("toBlob failed");
         downloadBlob(blob, out);
         setStatus(`✅ Saved\n${out}`);
       } catch (e) { alert(String(e?.message || e)); }
@@ -366,67 +371,7 @@ window.SharedArrayBuffer = ArrayBuffer;
       } catch (e) { alert(String(e?.message || e)); }
     };
 
-    /** Export trimmed (WEBM lite) */
-    async function exportTrimWebmLite(){
-      const { video } = qs();
-      const start = Math.max(0, Number(startEl.value) || 0);
-      const endIn = Math.max(0, Number(endEl.value) || 0);
-      const rate = Number(speedEl.value) || 1;
-
-      if (!v.duration || Number.isNaN(v.duration)) throw new Error("Video chưa load xong.");
-      const end = (endIn <= 0 || endIn > v.duration) ? v.duration : endIn;
-      if (end <= start) throw new Error("Trim end phải > trim start.");
-
-      const out = `${baseName(video)}_trim_${start.toFixed(1)}_${end.toFixed(1)}.webm`;
-
-      setStatus(`Exporting trim (lite)...\nstart=${start}s end=${end}s speed=${rate}x\n→ ${out}\n\nNote: output webm (lite)`);
-
-      drawFrameToCanvas();
-      const stream = c.captureStream(30);
-      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : "video/webm;codecs=vp8";
-
-      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
-      const chunks = [];
-      rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-
-      let rafId = 0;
-      const drawLoop = () => { drawFrameToCanvas(); rafId = requestAnimationFrame(drawLoop); };
-
-      v.pause();
-      v.currentTime = start;
-      v.playbackRate = rate;
-
-      await new Promise(resolve => v.addEventListener("seeked", resolve, { once:true }));
-      await v.play();
-      rec.start(500);
-      drawLoop();
-
-      const stopAll = async () => { cancelAnimationFrame(rafId); rec.stop(); v.pause(); };
-
-      const tick = () => {
-        if ((v.currentTime || 0) >= end) stopAll();
-        else requestAnimationFrame(tick);
-      };
-      tick();
-
-      await new Promise(resolve => rec.onstop = resolve);
-
-      const blob = new Blob(chunks, { type: mime });
-      downloadBlob(blob, out);
-
-      setStatus(`✅ Export done\n${out}`);
-    }
-
-    document.getElementById("exportTrimWebm").onclick = async () => {
-      try { await exportTrimWebmLite(); }
-      catch(e){ alert(String(e?.message || e)); }
-    };
-
-    /** =========================
-     *  FFmpeg single-thread: Trim MP4 & Replace (GIỮ AUDIO)
-     *  ========================= */
+    /** ========== FFmpeg (single-thread) Trim MP4 & Replace (GIỮ AUDIO) ========== */
     let _ffmpeg = null;
 
     async function ensureFFmpegLoaded() {
@@ -437,11 +382,10 @@ window.SharedArrayBuffer = ArrayBuffer;
       const { createFFmpeg, fetchFile } = window.FFmpeg;
       const ffmpeg = createFFmpeg({
         log: true,
-        // corePath cho 0.10.x
         corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js"
       });
 
-      setStatus("Loading FFmpeg (first time only)...\nKhông cần SharedArrayBuffer (single-thread).");
+      setStatus("Loading FFmpeg (first time only)...\n(single-thread, GH Pages OK)");
       await ffmpeg.load();
       setStatus("");
 
@@ -487,7 +431,7 @@ window.SharedArrayBuffer = ArrayBuffer;
       setStatus(`FFmpeg: trimming...\nstart=${start}s end=${end}s mode=${mode}\n(giữ audio)`);
 
       if (mode === "FAST") {
-        // Giữ audio/video nguyên (copy)
+        // copy stream: giữ cả audio + video
         await ffmpeg.run(
           "-ss", String(start),
           "-to", String(end),
@@ -496,8 +440,7 @@ window.SharedArrayBuffer = ArrayBuffer;
           outName
         );
       } else {
-        // PRECISE: re-encode video cho chuẩn, cố gắng copy audio
-        // Nếu audio copy fail (tuỳ codec), sẽ fallback AAC
+        // precise: encode video cho cắt chính xác hơn, giữ audio nếu copy được
         try {
           await ffmpeg.run(
             "-ss", String(start),
@@ -510,8 +453,8 @@ window.SharedArrayBuffer = ArrayBuffer;
             "-movflags", "+faststart",
             outName
           );
-        } catch (e) {
-          // fallback encode audio aac
+        } catch {
+          // fallback encode audio AAC
           await ffmpeg.run(
             "-ss", String(start),
             "-to", String(end),
@@ -567,7 +510,7 @@ window.SharedArrayBuffer = ArrayBuffer;
         const outBlob = await trimMp4BlobWithFFmpeg(srcBlob, start, end, mode);
         await replaceVideoOnGitHub(folder, video, outBlob);
 
-        // reload preview ngay trong editor
+        // reload preview
         try {
           const blobUrl = URL.createObjectURL(outBlob);
           v.pause();
@@ -593,27 +536,26 @@ window.SharedArrayBuffer = ArrayBuffer;
       info.textContent = `${folder}/${video} · mode=${mode}`;
       targetLabel.textContent = target ? target : "(none)";
 
-      // MUST set crossOrigin before src
       v.crossOrigin = "anonymous";
 
       try {
         let src;
         if (mode === "replaceImage") {
-          setWarn("Mode replaceImage: video tải qua GitHub API (token) để tránh lỗi CORS tainted canvas.");
+          setNote("Mode replaceImage: tải video qua GitHub API (token) để tránh lỗi CORS tainted canvas.");
           src = await loadVideoViaGitHubApi(folder, video);
         } else {
           const hasToken = !!(tokenEl.value || "").trim();
           if (hasToken) {
-            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame/trim&replace.");
+            setNote("Có token: tải video qua GitHub API (blob) để tránh CORS taint + dùng được trim/replace.");
             src = await loadVideoViaGitHubApi(folder, video);
           } else {
-            setWarn("Không có token: dùng CDN để xem nhanh. Nếu export/trim&replace cần token.");
+            setNote("Không có token: xem bằng CDN. Để trim/replace MP4 cần token.");
             src = mediaUrlCdn(folder, video);
           }
         }
         v.src = src;
       } catch (e) {
-        setWarn(String(e?.message || e));
+        setNote(String(e?.message || e));
         v.src = mediaUrlCdn(folder, video);
       }
 
