@@ -536,7 +536,7 @@
     if (m) { daysNums.add(parseInt(m[1],10)); continue; }
 
     // normal mp4/webp: anime_003.mp4 / anime_003.webp
-    m = name.match(/^([a-zA-Z]+)_(\d{1,})\.(mp4|webp)$/);
+m = name.match(/^([a-zA-Z][a-zA-Z0-9_]*)_(\d{1,})\.(mp4|webp)$/);
     if (m) {
       const prefix = m[1];
       const num = pad3(parseInt(m[2],10));
@@ -550,7 +550,7 @@
     }
 
     // normal preview: anime_003_preview.webp
-    m = name.match(/^([a-zA-Z]+)_(\d{1,})_preview\.webp$/);
+m = name.match(/^([a-zA-Z][a-zA-Z0-9_]*)_(\d{1,})_preview\.webp$/);
     if (m) {
       const prefix = m[1];
       const num = pad3(parseInt(m[2],10));
