@@ -44,11 +44,12 @@
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .danger { border-color:#f0c1c1 !important; }
 
-    a.btn{
+    a.btn, button.btn{
       border:1px solid var(--bd); background:#fff; padding:8px 10px; border-radius:10px;
       cursor:pointer; text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
+      font: inherit;
     }
-    a.btn:hover{ background:#f5f5f5; }
+    a.btn:hover, button.btn:hover{ background:#f5f5f5; }
   </style>
 </head>
 <body>
@@ -103,7 +104,7 @@
    *  ========================= */
   const OWNER = "tramiune";
   const REPO  = "tramiune001_res_wallpaper";
-  const BRANCH = "main";           // đổi nếu repo bạn là master
+  const BRANCH = "main";
   const ROOT_DIR = "resources";
 
   // JSON rule: dùng jsdelivr CDN
@@ -113,13 +114,7 @@
   const VIDEO_EXT = ["mp4","webm","mov"];
   /** ========================= */
 
-  const TYPE = {
-    STILL: 1,
-    LIVE: 0,
-    DOUBLE: 2,
-    DAYS: 3,
-    COUPLE: 4
-  };
+  const TYPE = { STILL:1, LIVE:0, DOUBLE:2, DAYS:3, COUPLE:4 };
 
   const elFolders = document.getElementById("folders");
   const elGrid = document.getElementById("grid");
@@ -285,11 +280,30 @@
     await openFolder(activeFolder);
   }
 
-  /** ---------- GRID ---------- */
+  /** ---------- GRID (có Update) ---------- */
   async function renderGrid(files) {
     elGrid.innerHTML = "";
     const q = elQ.value.trim().toLowerCase();
     const showPreview = elShowPreview.checked;
+
+    // map base -> preview filename (chỉ dùng để hint, không dùng để render)
+    const previewByBase = new Map();
+    for (const f of files) {
+      if (!isMediaFile(f.name)) continue;
+      if (!isPreviewName(f.name)) continue;
+      const base = f.name.replace("_preview.", ".");
+      previewByBase.set(base, f.name);
+    }
+
+    // map baseName(without ext) -> mp4 filename
+    const mp4ByBase = new Map();
+    for (const f of files) {
+      const e = extOf(f.name);
+      if (VIDEO_EXT.includes(e)) {
+        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        mp4ByBase.set(base, f.name);
+      }
+    }
 
     let shown = files
       .filter(f => isMediaFile(f.name))
@@ -302,6 +316,7 @@
     for (const f of shown) {
       const e = extOf(f.name);
       const isVideo = VIDEO_EXT.includes(e);
+      const isImage = IMAGE_EXT.includes(e);
 
       const card = document.createElement("div");
       card.className = "card";
@@ -312,9 +327,14 @@
 
       const meta = document.createElement("div");
       meta.className = "meta";
+
+      const maybePreview = previewByBase.get(f.name);
+      const labelPreviewHint =
+        (!isVideo && !isPreviewName(f.name) && maybePreview) ? " · has preview" : "";
+
       meta.innerHTML = `
         <div class="name" title="${f.name}">${f.name}</div>
-        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}</div>
+        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}${labelPreviewHint}</div>
       `;
 
       const actions = document.createElement("div");
@@ -323,6 +343,7 @@
       actions.style.flexWrap = "wrap";
       actions.style.marginTop = "8px";
 
+      // Open (blob)
       const openBtn = document.createElement("a");
       openBtn.className = "btn";
       openBtn.textContent = "🔗 Open";
@@ -338,20 +359,51 @@
       };
       actions.appendChild(openBtn);
 
+      // Delete
       const delBtn = document.createElement("button");
       delBtn.textContent = "🗑 Delete";
-      delBtn.className = "danger";
+      delBtn.className = "btn danger";
       delBtn.onclick = async () => {
         try { await deleteFileFlow(f); }
         catch (err) { alert(String(err?.message || err)); }
       };
       actions.appendChild(delBtn);
 
+      // Edit video (trim)
+      if (isVideo) {
+        const editBtn = document.createElement("a");
+        editBtn.textContent = "✂️ Edit";
+        editBtn.className = "btn";
+        editBtn.href = `./video_editor.html?mode=edit&folder=${encodeURIComponent(activeFolder)}&video=${encodeURIComponent(f.name)}`;
+        editBtn.target = "_blank";
+        actions.appendChild(editBtn);
+      }
+
+      // Update image from mp4 (webp not preview)
+      const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
+      if (isNormalWebp) {
+        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        const mp4 = mp4ByBase.get(base);
+        if (mp4) {
+          const updBtn = document.createElement("a");
+          updBtn.textContent = "🔄 Update";
+          updBtn.className = "btn";
+          updBtn.href =
+            `./video_editor.html?mode=replaceImage` +
+            `&folder=${encodeURIComponent(activeFolder)}` +
+            `&video=${encodeURIComponent(mp4)}` +
+            `&target=${encodeURIComponent(f.name)}`;
+          updBtn.target = "_blank";
+          actions.appendChild(updBtn);
+        }
+      }
+
       meta.appendChild(actions);
       card.appendChild(thumb);
       card.appendChild(meta);
       elGrid.appendChild(card);
 
+      // Load media blob url and render
       (async () => {
         try {
           const url = await getBlobUrlForFile(activeFolder, f.name);
@@ -379,19 +431,7 @@
     }
   }
 
-  /** ---------- JSON GENERATOR (prefix-based type) ---------- */
-  function mimeFromExt(ext) {
-    ext = (ext || "").toLowerCase();
-    if (ext === "mp4") return "video/mp4";
-    if (ext === "webm") return "video/webm";
-    if (ext === "mov") return "video/quicktime";
-    if (ext === "webp") return "image/webp";
-    if (ext === "png") return "image/png";
-    if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-    if (ext === "gif") return "image/gif";
-    return "application/octet-stream";
-  }
-
+  /** ---------- JSON GENERATOR ---------- */
   function cdnUrl(folder, file) {
     return `${CDN_BASE}${folder}/${file}`;
   }
@@ -400,30 +440,30 @@
     // prefix_003.ext
     const m = name.match(/^([a-z0-9]+)_(\d{3})\.(\w+)$/i);
     if (!m) return null;
-    return { prefix: m[1], idx: Number(m[2]), ext: m[3].toLowerCase(), base: `${m[1]}_${m[2]}` };
+    return { prefix: m[1].toLowerCase(), idx: Number(m[2]), ext: m[3].toLowerCase(), base: `${m[1]}_${m[2]}` };
   }
 
   function parsePreview(name) {
     // prefix_003_preview.webp
     const m = name.match(/^([a-z0-9]+)_(\d{3})_preview\.webp$/i);
     if (!m) return null;
-    return { prefix: m[1], idx: Number(m[2]), base: `${m[1]}_${m[2]}` };
+    return { prefix: m[1].toLowerCase(), idx: Number(m[2]), base: `${m[1]}_${m[2]}` };
   }
 
   function parseDouble(name) {
     // double_001_0.webp / double_001_1.webp
     const m = name.match(/^(double)_(\d{3})_(0|1)\.webp$/i);
     if (!m) return null;
-    return { prefix: "double", idx: Number(m[2]), part: Number(m[3]), base: `double_${m[2]}` };
+    return { idx: Number(m[2]), part: Number(m[3]), base: `double_${m[2]}` };
   }
 
   function parseDays(name) {
-    // days_001_6h.webp ...
+    // days_001_6h.webp / 12h / 18h / 24h
     const m = name.match(/^(days)_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
     if (!m) return null;
     const hourKey = m[3].toLowerCase();
     const hourMap = { "6h":"06:00", "12h":"12:00", "18h":"18:00", "24h":"24:00" };
-    return { prefix: "days", idx: Number(m[2]), hourKey, hour: hourMap[hourKey] || "", base: `days_${m[2]}` };
+    return { idx: Number(m[2]), hourKey, hour: hourMap[hourKey] || "", base: `days_${m[2]}` };
   }
 
   function buildCategoryJsonItems(folder, files) {
@@ -432,7 +472,7 @@
     const fileSet = new Set(names);
 
     // preview map: base -> preview file
-    const previewByBase = new Map(); // base -> filename
+    const previewByBase = new Map();
     for (const fn of names) {
       const pv = parsePreview(fn);
       if (pv) previewByBase.set(pv.base, fn);
@@ -448,7 +488,7 @@
     }
 
     // DAYS groups
-    const daysGroups = new Map(); // base -> [{file,hourKey,hour}]
+    const daysGroups = new Map(); // base -> arr
     for (const fn of names) {
       const d = parseDays(fn);
       if (!d) continue;
@@ -460,7 +500,7 @@
     const baseGroups = new Map(); // base -> {prefix, idx, mp4?, webp?}
     for (const fn of names) {
       if (isPreviewName(fn)) continue;
-      if (parseDouble(fn) || parseDays(fn)) continue; // handled separately
+      if (parseDouble(fn) || parseDays(fn)) continue;
 
       const p = parseBase3(fn);
       if (!p) continue;
@@ -473,7 +513,7 @@
 
     const items = [];
 
-    // DOUBLE items (type=2 always because prefix double)
+    // DOUBLE
     for (const [base, parts] of doubleGroups.entries()) {
       const medias = [];
       if (parts["0"]) medias.push({ url: cdnUrl(folder, parts["0"]), name: parts["0"], thumbUrl: "", contentType: "image/webp" });
@@ -492,7 +532,7 @@
       });
     }
 
-    // DAYS items (type=3 always because prefix days)
+    // DAYS
     for (const [base, arr] of daysGroups.entries()) {
       const order = { "6h":6, "12h":12, "18h":18, "24h":24 };
       const sorted = arr.slice().sort((a,b)=>(order[a.hourKey]||0)-(order[b.hourKey]||0));
@@ -524,9 +564,8 @@
       const webpName = g.webp || `${base}.webp`;
       if (!fileSet.has(webpName)) continue;
 
-      // type by prefix first
       let t;
-      if ((g.prefix || "").toLowerCase() === "couple") t = TYPE.COUPLE;
+      if ((g.prefix || "") === "couple") t = TYPE.COUPLE;
       else if (g.mp4) t = TYPE.LIVE;
       else t = TYPE.STILL;
 
@@ -537,7 +576,7 @@
             url: cdnUrl(folder, g.mp4),
             name: g.mp4,
             thumbUrl: "",
-            contentType: mimeFromExt("mp4")
+            contentType: "video/mp4"
           });
         }
         const pv = previewByBase.get(base);
