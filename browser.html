@@ -240,7 +240,6 @@
 
   /** ---------- UPSERT FILE (PUT) ---------- */
   function b64EncodeUnicode(str) {
-    // base64 utf-8 safe
     const bytes = new TextEncoder().encode(str);
     let bin = "";
     for (const b of bytes) bin += String.fromCharCode(b);
@@ -250,12 +249,11 @@
   async function getFileShaIfExists(path) {
     try {
       const meta = await fetchJson(ghContentsUrl(path), true);
-      if (meta && meta.sha) return meta.sha;
-      return null;
+      return meta?.sha || null;
     } catch (e) {
       const msg = String(e?.message || e);
       if (msg.includes("HTTP 404")) return null;
-      return null; // best-effort
+      return null;
     }
   }
 
@@ -332,15 +330,13 @@
       const thumb = document.createElement("div");
       thumb.className = "thumb";
 
-      // IMPORTANT: do NOT swap still webp into preview.
-      // Only use preview thumbnail when file is a video, or when user opened the preview file itself.
+      // only show preview thumb for VIDEO items if exists
       const maybePreview = previewByBase.get(f.name);
       const displayUrl = (isVideo && maybePreview)
-        ? mediaUrl(activeFolder, maybePreview)  // if video has preview, show preview image instead of loading mp4 in grid
+        ? mediaUrl(activeFolder, maybePreview)
         : mediaUrl(activeFolder, f.name);
 
       if (isVideo) {
-        // show preview as image (lighter). user can click open to play video.
         if (maybePreview) {
           const img = document.createElement("img");
           img.loading = "lazy";
@@ -384,7 +380,6 @@
       actions.style.flexWrap = "wrap";
       actions.style.marginTop = "8px";
 
-      // delete
       const delBtn = document.createElement("button");
       delBtn.textContent = "🗑 Delete";
       delBtn.className = "btn danger";
@@ -394,7 +389,6 @@
       };
       actions.appendChild(delBtn);
 
-      // edit video
       if (isVideo) {
         const editBtn = document.createElement("a");
         editBtn.textContent = "✂️ Edit";
@@ -404,7 +398,6 @@
         actions.appendChild(editBtn);
       }
 
-      // update image from mp4 (kept)
       const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
       if (isNormalWebp) {
         const base = f.name.slice(0, f.name.lastIndexOf(".")); // anime_001
@@ -458,7 +451,7 @@
     allFolders = data
       .filter(x => x.type === "dir")
       .map(x => ({ name: x.name, path: x.path }))
-      .sort((a,b) => a.name.localeCompare(b.name, "en"));
+      .sort((a,b) => a.name.localeCompare(b, "en"));
 
     renderFolders(allFolders);
     setStatus("");
@@ -486,320 +479,244 @@
   }
 
   /** =========================
-   *  JSON GENERATOR (ALL)
-   *  Rules:
-   *   - scan folders in resources/ matching /^\d+_/
-   *   - infer type by filename prefix:
-   *       couple_*           => type=4, medias=[{webp(+preview)}]
-   *       double_<id>_0/1    => type=2, medias=[_0.webp, _1.webp]
-   *       days_<id>_6h/12h/18h/24h => type=3, medias with hour
-   *       default:
-   *         has mp4 + webp   => type=0 (LIVE)
-   *         only webp        => type=1 (STILL)
-   *   - thumbUrl uses *_preview.webp if exists else ""
-   *   - id: `${categoryId}_${NNN}` (NNN extracted from base name)
-   *   - createdAt: Date.now()/1000 (unix seconds) at generation time
-   *   - isPremium: true, subType:0, coinToUnlock:0
+   *  JSON GENERATOR (ALL) – TRIỆT ĐỂ, KHÔNG BỎ SÓT
+   *  - Không dedupe (trùng giữa folder OK)
+   *  - Dựa trên file thực tế trong folder:
+   *    couple_{nnn}.webp (+ preview nếu có)     => type=4
+   *    double_{nnn}_0.webp / _1.webp           => type=2 (có cái nào add cái đó)
+   *    days_{nnn}_6h/12h/18h/24h.webp          => type=3 (có slot nào add slot đó)
+   *    {prefix}_{nnn}.mp4 + {prefix}_{nnn}.webp => type=0
+   *    chỉ {prefix}_{nnn}.webp                 => type=1
    *  ========================= */
 
   function pad3(n) {
     const s = String(n);
-    if (s.length >= 3) return s;
-    return ("000" + s).slice(-3);
+    return s.length >= 3 ? s : ("000" + s).slice(-3);
   }
 
-  function mimeFor(ext) {
-    ext = ext.toLowerCase();
-    if (ext === "webp") return "image/webp";
-    if (ext === "png") return "image/png";
-    if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-    if (ext === "gif") return "image/gif";
-    if (ext === "mp4") return "video/mp4";
-    if (ext === "webm") return "video/webm";
-    if (ext === "mov") return "video/quicktime";
-    return "application/octet-stream";
-  }
-
-  function byName(files) {
-    const m = new Map();
-    for (const f of files) m.set(f.name, f);
-    return m;
-  }
-
-  function listNames(files) { return files.map(x => x.name); }
-
-  function parseNumberFromName(name) {
-    // try find last _NNN before extension or before extra suffix
-    // examples:
-    // anime_003.webp -> 3
-    // double_001_0.webp -> 1
-    // days_001_6h.webp -> 1
-    const base = name.replace(/\.[^.]+$/, "");
-    const m = base.match(/_(\d{1,})$/);
-    if (m) return parseInt(m[1], 10);
-
-    const m2 = base.match(/_(\d{1,})_(?:0|1)$/);
-    if (m2) return parseInt(m2[1], 10);
-
-    const m3 = base.match(/_(\d{1,})_(?:6h|12h|18h|24h)$/);
-    if (m3) return parseInt(m3[1], 10);
-
-    // fallback: any 3 digits
-    const m4 = base.match(/(\d{3})/);
-    if (m4) return parseInt(m4[1], 10);
-
-    return null;
-  }
-
-  function detectPrefix(files) {
-    // pick first non-preview media file and use prefix before last _NNN
-    const names = listNames(files).filter(n => isMediaFile(n) && !isPreviewName(n));
-    for (const n of names) {
-      const base = n.replace(/\.[^.]+$/, "");
-      // remove trailing parts like _0/_1/_6h...
-      const cleaned = base
-        .replace(/_(?:0|1)$/, "")
-        .replace(/_(?:6h|12h|18h|24h)$/, "");
-      const m = cleaned.match(/^(.*)_\d+$/);
-      if (m) return m[1];
-    }
+  function hourFromDaysSuffix(suf) {
+    if (suf === "6h") return "06:00";
+    if (suf === "12h") return "12:00";
+    if (suf === "18h") return "18:00";
+    if (suf === "24h") return "24:00";
     return "";
   }
 
-  function buildItemLive(categoryId, prefix, num, hasPreview, createdAtSec) {
-    const nnn = pad3(num);
-    const mp4Name = `${prefix}_${nnn}.mp4`;
-    const webpName = `${prefix}_${nnn}.webp`;
-    const previewName = `${prefix}_${nnn}_preview.webp`;
-
-    const medias = [
-      {
-        url: mediaUrl(categoryId, mp4Name),
-        name: mp4Name,
-        thumbUrl: "",
-        contentType: "video/mp4"
-      },
-      {
-        url: mediaUrl(categoryId, webpName),
-        name: webpName,
-        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
-        contentType: "image/webp"
-      }
-    ];
-
-    return {
-      id: `${categoryId}_${nnn}`,
-      medias,
-      categoryId,
-      isPremium: true,
-      createdAt: createdAtSec,
-      subType: 0,
-      type: TYPE.LIVE,
-      coinToUnlock: 0
-    };
+  function groupFiles(files) {
+    const set = new Set(files.map(f => f.name));
+    return set;
   }
 
-  function buildItemStill(categoryId, prefix, num, hasPreview, createdAtSec) {
-    const nnn = pad3(num);
-    const webpName = `${prefix}_${nnn}.webp`;
-    const previewName = `${prefix}_${nnn}_preview.webp`;
-
-    const medias = [
-      {
-        url: mediaUrl(categoryId, webpName),
-        name: webpName,
-        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
-        contentType: "image/webp"
-      }
-    ];
-
-    return {
-      id: `${categoryId}_${nnn}`,
-      medias,
-      categoryId,
-      isPremium: true,
-      createdAt: createdAtSec,
-      subType: 0,
-      type: TYPE.STILL,
-      coinToUnlock: 0
-    };
-  }
-
-  function buildItemCouple(categoryId, num, hasPreview, createdAtSec) {
-    const nnn = pad3(num);
-    const webpName = `couple_${nnn}.webp`;
-    const previewName = `couple_${nnn}_preview.webp`;
-
-    const medias = [
-      {
-        url: mediaUrl(categoryId, webpName),
-        name: webpName,
-        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
-        contentType: "image/webp"
-      }
-    ];
-
-    return {
-      id: `${categoryId}_${nnn}`,
-      medias,
-      categoryId,
-      isPremium: true,
-      createdAt: createdAtSec,
-      subType: 0,
-      type: TYPE.COUPLE,
-      coinToUnlock: 0
-    };
-  }
-
-  function buildItemDouble(categoryId, num, createdAtSec) {
-    const nnn = pad3(num);
-    const a = `double_${nnn}_0.webp`;
-    const b = `double_${nnn}_1.webp`;
-
-    const medias = [
-      { url: mediaUrl(categoryId, a), name: a, thumbUrl: "", contentType: "image/webp" },
-      { url: mediaUrl(categoryId, b), name: b, thumbUrl: "", contentType: "image/webp" }
-    ];
-
-    return {
-      id: `${categoryId}_${nnn}`,
-      medias,
-      categoryId,
-      isPremium: true,
-      createdAt: createdAtSec,
-      subType: 0,
-      type: TYPE.DOUBLE,
-      coinToUnlock: 0
-    };
-  }
-
-  function buildItemDays(categoryId, num, createdAtSec) {
-    const nnn = pad3(num);
-    const slots = [
-      { suf: "6h", hour: "06:00" },
-      { suf: "12h", hour: "12:00" },
-      { suf: "18h", hour: "18:00" },
-      { suf: "24h", hour: "24:00" }
-    ];
-    const medias = slots.map(s => {
-      const name = `days_${nnn}_${s.suf}.webp`;
-      return {
-        url: mediaUrl(categoryId, name),
-        name,
-        thumbUrl: "",
-        hour: s.hour,
-        contentType: "image/webp"
-      };
-    });
-
-    return {
-      id: `${categoryId}_${nnn}`,
-      medias,
-      categoryId,
-      isPremium: true,
-      createdAt: createdAtSec,
-      subType: 0,
-      type: TYPE.DAYS,
-      coinToUnlock: 0
-    };
-  }
-
-  function generateItemsForFolder(categoryId, files) {
+  function generateItemsForFolderStrict(categoryId, files) {
     const createdAtSec = Math.floor(Date.now() / 1000);
+    const names = groupFiles(files);
 
-    const nameMap = byName(files);
-    const names = new Set(listNames(files));
+    // Helpers
+    const has = (n) => names.has(n);
 
-    // detect based on filename prefixes
-    const hasAny = (re) => {
-      for (const n of names) if (re.test(n)) return true;
-      return false;
-    };
+    // 1) Collect keys by type
+    const coupleNums = new Set();
+    const doubleNums = new Set();
+    const daysNums   = new Set();
 
-    // Collect numbers for each type
-    const nums = new Set();
+    // prefix map for normal (anime/silly/...)
+    // key: `${prefix}_${nnn}` -> { hasMp4, hasWebp, hasPreview }
+    const normal = new Map();
 
-    // couple
-    for (const n of names) {
-      const m = n.match(/^couple_(\d+)\.webp$/);
-      if (m) nums.add(parseInt(m[1], 10));
-    }
+    for (const name of names) {
+      // skip json itself if any
+      if (name.endsWith(".json")) continue;
 
-    // double
-    for (const n of names) {
-      const m = n.match(/^double_(\d+)_(0|1)\.webp$/);
-      if (m) nums.add(parseInt(m[1], 10));
-    }
+      // couple
+      let m = name.match(/^couple_(\d{1,})\.webp$/);
+      if (m) { coupleNums.add(parseInt(m[1],10)); continue; }
 
-    // days
-    for (const n of names) {
-      const m = n.match(/^days_(\d+)_(6h|12h|18h|24h)\.webp$/);
-      if (m) nums.add(parseInt(m[1], 10));
-    }
+      // double
+      m = name.match(/^double_(\d{1,})_(0|1)\.webp$/);
+      if (m) { doubleNums.add(parseInt(m[1],10)); continue; }
 
-    // default (anime/silly/whatever): detect prefix
-    const prefix = detectPrefix(files); // e.g. anime, silly...
-    if (prefix) {
-      for (const n of names) {
-        // base media: prefix_NNN.(mp4|webp)
-        const m = n.match(new RegExp(`^${prefix}_(\\d+)\\.(mp4|webp)$`));
-        if (m) nums.add(parseInt(m[1], 10));
+      // days
+      m = name.match(/^days_(\d{1,})_(6h|12h|18h|24h)\.webp$/);
+      if (m) { daysNums.add(parseInt(m[1],10)); continue; }
+
+      // normal mp4/webp
+      // ex: anime_003.mp4 , anime_003.webp
+      m = name.match(/^([a-zA-Z]+)_(\d{1,})\.(mp4|webp)$/);
+      if (m) {
+        const prefix = m[1];
+        const num = pad3(parseInt(m[2],10));
+        const ext = m[3];
+        const key = `${prefix}_${num}`;
+        const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
+        if (ext === "mp4") obj.hasMp4 = true;
+        if (ext === "webp") obj.hasWebp = true;
+        // preview check later
+        normal.set(key, obj);
+        continue;
+      }
+
+      // normal preview
+      m = name.match(/^([a-zA-Z]+)_(\d{1,})_preview\.webp$/);
+      if (m) {
+        const prefix = m[1];
+        const num = pad3(parseInt(m[2],10));
+        const key = `${prefix}_${num}`;
+        const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
+        obj.hasPreview = true;
+        normal.set(key, obj);
+        continue;
       }
     }
 
-    const sortedNums = [...nums].sort((a,b)=>a-b);
     const items = [];
 
-    for (const num of sortedNums) {
-      const nnn = pad3(num);
+    // 2) Build couple items
+    [...coupleNums].sort((a,b)=>a-b).forEach(n => {
+      const num = pad3(n);
+      const webpName = `couple_${num}.webp`;
+      const previewName = `couple_${num}_preview.webp`;
+      const medias = [{
+        url: mediaUrl(categoryId, webpName),
+        name: webpName,
+        thumbUrl: has(previewName) ? mediaUrl(categoryId, previewName) : "",
+        contentType: "image/webp"
+      }];
+      items.push({
+        id: `${categoryId}_${num}`,
+        medias,
+        categoryId,
+        isPremium: true,
+        createdAt: createdAtSec,
+        subType: 0,
+        type: TYPE.COUPLE,
+        coinToUnlock: 0
+      });
+    });
 
-      // COUPLE
-      const coupleWebp = `couple_${nnn}.webp`;
-      if (names.has(coupleWebp)) {
-        const hasPreview = names.has(`couple_${nnn}_preview.webp`);
-        items.push(buildItemCouple(categoryId, num, hasPreview, createdAtSec));
-        continue;
+    // 3) Build double items (có cái nào add cái đó)
+    [...doubleNums].sort((a,b)=>a-b).forEach(n => {
+      const num = pad3(n);
+      const f0 = `double_${num}_0.webp`;
+      const f1 = `double_${num}_1.webp`;
+
+      const medias = [];
+      if (has(f0)) medias.push({ url: mediaUrl(categoryId, f0), name: f0, thumbUrl: "", contentType: "image/webp" });
+      if (has(f1)) medias.push({ url: mediaUrl(categoryId, f1), name: f1, thumbUrl: "", contentType: "image/webp" });
+
+      // chỉ push nếu thực sự có ít nhất 1 file
+      if (medias.length) {
+        items.push({
+          id: `${categoryId}_${num}`,
+          medias,
+          categoryId,
+          isPremium: true,
+          createdAt: createdAtSec,
+          subType: 0,
+          type: TYPE.DOUBLE,
+          coinToUnlock: 0
+        });
       }
+    });
 
-      // DOUBLE
-      const d0 = `double_${nnn}_0.webp`;
-      const d1 = `double_${nnn}_1.webp`;
-      if (names.has(d0) && names.has(d1)) {
-        items.push(buildItemDouble(categoryId, num, createdAtSec));
-        continue;
-      }
-
-      // DAYS
-      const day6 = `days_${nnn}_6h.webp`;
-      const day12 = `days_${nnn}_12h.webp`;
-      const day18 = `days_${nnn}_18h.webp`;
-      const day24 = `days_${nnn}_24h.webp`;
-      if (names.has(day6) && names.has(day12) && names.has(day18) && names.has(day24)) {
-        items.push(buildItemDays(categoryId, num, createdAtSec));
-        continue;
-      }
-
-      // DEFAULT (LIVE/STILL)
-      if (prefix) {
-        const mp4 = `${prefix}_${nnn}.mp4`;
-        const webp = `${prefix}_${nnn}.webp`;
-        const preview = `${prefix}_${nnn}_preview.webp`;
-        const hasPreview = names.has(preview);
-
-        const hasMp4 = names.has(mp4);
-        const hasWebp = names.has(webp);
-
-        if (hasMp4 && hasWebp) {
-          items.push(buildItemLive(categoryId, prefix, num, hasPreview, createdAtSec));
-          continue;
+    // 4) Build days items (có slot nào add slot đó)
+    const dayOrder = ["6h","12h","18h","24h"];
+    [...daysNums].sort((a,b)=>a-b).forEach(n => {
+      const num = pad3(n);
+      const medias = [];
+      for (const suf of dayOrder) {
+        const fname = `days_${num}_${suf}.webp`;
+        if (has(fname)) {
+          medias.push({
+            url: mediaUrl(categoryId, fname),
+            name: fname,
+            thumbUrl: "",
+            hour: hourFromDaysSuffix(suf),
+            contentType: "image/webp"
+          });
         }
-        if (hasWebp) {
-          items.push(buildItemStill(categoryId, prefix, num, hasPreview, createdAtSec));
-          continue;
-        }
+      }
+      if (medias.length) {
+        items.push({
+          id: `${categoryId}_${num}`,
+          medias,
+          categoryId,
+          isPremium: true,
+          createdAt: createdAtSec,
+          subType: 0,
+          type: TYPE.DAYS,
+          coinToUnlock: 0
+        });
+      }
+    });
+
+    // 5) Build normal items (LIVE hoặc STILL)
+    // sort by prefix then num
+    const normalsSorted = [...normal.values()].sort((a,b)=>{
+      const p = a.prefix.localeCompare(b.prefix);
+      if (p !== 0) return p;
+      return a.num.localeCompare(b.num);
+    });
+
+    for (const it of normalsSorted) {
+      const prefix = it.prefix;
+      const num = it.num;
+      const baseId = `${categoryId}_${num}`;
+
+      const mp4Name = `${prefix}_${num}.mp4`;
+      const webpName = `${prefix}_${num}.webp`;
+      const previewName = `${prefix}_${num}_preview.webp`;
+
+      // LIVE
+      if (it.hasMp4 && it.hasWebp) {
+        items.push({
+          id: baseId,
+          medias: [
+            {
+              url: mediaUrl(categoryId, mp4Name),
+              name: mp4Name,
+              thumbUrl: "",
+              contentType: "video/mp4"
+            },
+            {
+              url: mediaUrl(categoryId, webpName),
+              name: webpName,
+              thumbUrl: it.hasPreview && has(previewName) ? mediaUrl(categoryId, previewName) : "",
+              contentType: "image/webp"
+            }
+          ],
+          categoryId,
+          isPremium: true,
+          createdAt: createdAtSec,
+          subType: 0,
+          type: TYPE.LIVE,
+          coinToUnlock: 0
+        });
+        continue;
+      }
+
+      // STILL
+      if (it.hasWebp) {
+        items.push({
+          id: baseId,
+          medias: [
+            {
+              url: mediaUrl(categoryId, webpName),
+              name: webpName,
+              thumbUrl: it.hasPreview && has(previewName) ? mediaUrl(categoryId, previewName) : "",
+              contentType: "image/webp"
+            }
+          ],
+          categoryId,
+          isPremium: true,
+          createdAt: createdAtSec,
+          subType: 0,
+          type: TYPE.STILL,
+          coinToUnlock: 0
+        });
       }
     }
 
+    // Lưu ý: không dedupe – folder nào có gì thì items có hết.
     return items;
   }
 
@@ -831,11 +748,14 @@
         const folderName = folders[i];
         setStatus(`Generating ALL JSON...\n(${i+1}/${folders.length}) ${folderName}`);
         const files = await listFolderFiles(folderName);
-        const items = generateItemsForFolder(folderName, files);
+
+        // TRIỆT ĐỂ: dựa theo file thật
+        const items = generateItemsForFolderStrict(folderName, files);
+
+        // không dedupe
         allItems = allItems.concat(items);
       }
 
-      // Output is array only (as you requested “gộp thành 1 json”)
       const jsonText = JSON.stringify(allItems, null, 2);
 
       setStatus(`Uploading...\n${ALL_JSON_PATH}\nItems: ${allItems.length}`);
