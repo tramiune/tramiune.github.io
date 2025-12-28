@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Wallpaper Browser (GitHub API only)</title>
+  <title>Wallpaper Browser</title>
   <style>
     :root { --bd:#e7e7e7; --mut:#666; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
@@ -47,15 +47,15 @@
     a.btn, button.btn{
       border:1px solid var(--bd); background:#fff; padding:8px 10px; border-radius:10px;
       cursor:pointer; text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
-      font: inherit;
     }
     a.btn:hover, button.btn:hover{ background:#f5f5f5; }
+    button.btn{ font: inherit; }
   </style>
 </head>
 <body>
 <header>
   <b>Wallpaper Browser</b>
-  <span class="mut">API-only: list folder/file + load media via GitHub API blob URL</span>
+  <span class="mut">CDN media + GitHub Contents API (list/delete/write json)</span>
 
   <input id="q" type="text" placeholder="Filter folder/file..." />
 
@@ -71,7 +71,9 @@
   </label>
 
   <button id="reload">Reload</button>
-  <button id="genJson" title="Tạo/Cập nhật file {folder}.json trong folder đang mở">🧾 Generate JSON</button>
+
+  <button id="genAll" class="btn" title="Gộp tất cả folder 101_,102_... -> dev/wallpaper.json">🧩 Generate JSON (ALL)</button>
+
   <span class="mut" id="rate"></span>
 </header>
 
@@ -107,14 +109,18 @@
   const BRANCH = "main";
   const ROOT_DIR = "resources";
 
-  // JSON rule: dùng jsdelivr CDN
+  // CDN cho media (để như cũ)
   const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
+
+  // JSON output (gộp ALL)
+  const ALL_JSON_PATH = "dev/wallpaper.json"; // repo path
 
   const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
   const VIDEO_EXT = ["mp4","webm","mov"];
   /** ========================= */
 
-  const TYPE = { STILL:1, LIVE:0, DOUBLE:2, DAYS:3, COUPLE:4 };
+  // Types
+  const TYPE = { LIVE:0, STILL:1, DOUBLE:2, DAYS:3, COUPLE:4 };
 
   const elFolders = document.getElementById("folders");
   const elGrid = document.getElementById("grid");
@@ -128,17 +134,13 @@
   const elToken = document.getElementById("token");
   const elRemember = document.getElementById("remember");
   const elShowPreview = document.getElementById("showPreview");
-  const elGenJson = document.getElementById("genJson");
 
   let allFolders = [];
   let activeFolder = null;
   let activeFiles = [];
 
-  /** cache blob url theo "folder/file" */
-  const blobUrlCache = new Map(); // key -> { url, ts }
-  const MAX_CACHE = 120;
-
   function setStatus(s) { elStatus.textContent = s || ""; }
+
   function extOf(name) {
     const i = name.lastIndexOf(".");
     return i >= 0 ? name.slice(i+1).toLowerCase() : "";
@@ -148,11 +150,15 @@
     return IMAGE_EXT.includes(e) || VIDEO_EXT.includes(e);
   }
   function isPreviewName(name) { return name.includes("_preview."); }
-
   function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
+
   function ghContentsUrl(path) {
     const p = encodePath(path);
     return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
+  }
+
+  function mediaUrl(folderName, fileName) {
+    return `${CDN_BASE}${folderName}/${fileName}`;
   }
 
   function getAuthToken() {
@@ -197,54 +203,6 @@
     });
   })();
 
-  /** ---------- MEDIA LOAD via API -> blob URL ---------- */
-  async function getBlobUrlForFile(folderName, fileName) {
-    const key = `${folderName}/${fileName}`;
-    const cached = blobUrlCache.get(key);
-    if (cached?.url) return cached.url;
-
-    const token = getAuthToken(); // API-only => bắt buộc token
-    const filePath = `${ROOT_DIR}/${folderName}/${fileName}`;
-
-    const meta = await fetchJson(ghContentsUrl(filePath), true);
-    const dl = meta?.download_url;
-    if (!dl) throw new Error(`No download_url for ${filePath}`);
-
-    const res = await fetch(dl, { headers: { "Authorization": `Bearer ${token}` } }).catch(() => fetch(dl));
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> "");
-      throw new Error(`Download failed: HTTP ${res.status}\n${txt}`);
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    blobUrlCache.set(key, { url, ts: Date.now() });
-    if (blobUrlCache.size > MAX_CACHE) {
-      const oldestKey = [...blobUrlCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0]?.[0];
-      if (oldestKey) {
-        const old = blobUrlCache.get(oldestKey);
-        try { URL.revokeObjectURL(old.url); } catch {}
-        blobUrlCache.delete(oldestKey);
-      }
-    }
-    return url;
-  }
-
-  function renderFolders(list) {
-    elFolders.innerHTML = "";
-    const q = elQ.value.trim().toLowerCase();
-    const shown = list.filter(f => f.name.toLowerCase().includes(q));
-    elFolderCount.textContent = `${shown.length}/${list.length}`;
-
-    for (const f of shown) {
-      const div = document.createElement("div");
-      div.className = "folder" + (activeFolder === f.name ? " active" : "");
-      div.innerHTML = `<span>📁 ${f.name}</span><span class="small">open</span>`;
-      div.onclick = () => openFolder(f.name);
-      elFolders.appendChild(div);
-    }
-  }
-
   /** ---------- DELETE ---------- */
   async function deleteFileOnGitHub(filePath, sha) {
     const token = getAuthToken();
@@ -280,13 +238,63 @@
     await openFolder(activeFolder);
   }
 
-  /** ---------- GRID (có Update) ---------- */
+  /** ---------- UPSERT FILE (PUT) ---------- */
+  function b64EncodeUnicode(str) {
+    // base64 utf-8 safe
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin);
+  }
+
+  async function getFileShaIfExists(path) {
+    try {
+      const meta = await fetchJson(ghContentsUrl(path), true);
+      if (meta && meta.sha) return meta.sha;
+      return null;
+    } catch (e) {
+      const msg = String(e?.message || e);
+      if (msg.includes("HTTP 404")) return null;
+      return null; // best-effort
+    }
+  }
+
+  async function upsertTextFile(path, text, message) {
+    const token = getAuthToken();
+    const sha = await getFileShaIfExists(path);
+
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
+    const body = {
+      message: message || `Update ${path}`,
+      content: b64EncodeUnicode(text),
+      branch: BRANCH
+    };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> "");
+      throw new Error(`Write failed: HTTP ${res.status}\n${txt}`);
+    }
+    return res.json();
+  }
+
+  /** ---------- GRID (kept: Update/Edit/Delete) ---------- */
   async function renderGrid(files) {
     elGrid.innerHTML = "";
     const q = elQ.value.trim().toLowerCase();
     const showPreview = elShowPreview.checked;
 
-    // map base -> preview filename (chỉ dùng để hint, không dùng để render)
+    // preview map: base file -> preview file
     const previewByBase = new Map();
     for (const f of files) {
       if (!isMediaFile(f.name)) continue;
@@ -295,12 +303,12 @@
       previewByBase.set(base, f.name);
     }
 
-    // map baseName(without ext) -> mp4 filename
+    // mp4 map: base name -> mp4 file (for Update)
     const mp4ByBase = new Map();
     for (const f of files) {
       const e = extOf(f.name);
       if (VIDEO_EXT.includes(e)) {
-        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        const base = f.name.slice(0, f.name.lastIndexOf(".")); // anime_003
         mp4ByBase.set(base, f.name);
       }
     }
@@ -323,18 +331,51 @@
 
       const thumb = document.createElement("div");
       thumb.className = "thumb";
-      thumb.textContent = "Loading...";
+
+      // IMPORTANT: do NOT swap still webp into preview.
+      // Only use preview thumbnail when file is a video, or when user opened the preview file itself.
+      const maybePreview = previewByBase.get(f.name);
+      const displayUrl = (isVideo && maybePreview)
+        ? mediaUrl(activeFolder, maybePreview)  // if video has preview, show preview image instead of loading mp4 in grid
+        : mediaUrl(activeFolder, f.name);
+
+      if (isVideo) {
+        // show preview as image (lighter). user can click open to play video.
+        if (maybePreview) {
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.src = displayUrl;
+          img.alt = f.name;
+          thumb.appendChild(img);
+        } else {
+          const v = document.createElement("video");
+          v.src = displayUrl;
+          v.controls = true;
+          v.muted = true;
+          v.playsInline = true;
+          v.preload = "metadata";
+          thumb.appendChild(v);
+        }
+      } else {
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = displayUrl;
+        img.alt = f.name;
+        thumb.appendChild(img);
+      }
 
       const meta = document.createElement("div");
       meta.className = "meta";
 
-      const maybePreview = previewByBase.get(f.name);
       const labelPreviewHint =
         (!isVideo && !isPreviewName(f.name) && maybePreview) ? " · has preview" : "";
 
       meta.innerHTML = `
         <div class="name" title="${f.name}">${f.name}</div>
         <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}${labelPreviewHint}</div>
+        <div class="small" style="margin-top:6px;">
+          <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">open file</a>
+        </div>
       `;
 
       const actions = document.createElement("div");
@@ -343,23 +384,7 @@
       actions.style.flexWrap = "wrap";
       actions.style.marginTop = "8px";
 
-      // Open (blob)
-      const openBtn = document.createElement("a");
-      openBtn.className = "btn";
-      openBtn.textContent = "🔗 Open";
-      openBtn.href = "#";
-      openBtn.onclick = async (ev) => {
-        ev.preventDefault();
-        try {
-          const url = await getBlobUrlForFile(activeFolder, f.name);
-          window.open(url, "_blank", "noopener,noreferrer");
-        } catch (err) {
-          alert(String(err?.message || err));
-        }
-      };
-      actions.appendChild(openBtn);
-
-      // Delete
+      // delete
       const delBtn = document.createElement("button");
       delBtn.textContent = "🗑 Delete";
       delBtn.className = "btn danger";
@@ -369,7 +394,7 @@
       };
       actions.appendChild(delBtn);
 
-      // Edit video (trim)
+      // edit video
       if (isVideo) {
         const editBtn = document.createElement("a");
         editBtn.textContent = "✂️ Edit";
@@ -379,10 +404,10 @@
         actions.appendChild(editBtn);
       }
 
-      // Update image from mp4 (webp not preview)
+      // update image from mp4 (kept)
       const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
       if (isNormalWebp) {
-        const base = f.name.slice(0, f.name.lastIndexOf("."));
+        const base = f.name.slice(0, f.name.lastIndexOf(".")); // anime_001
         const mp4 = mp4ByBase.get(base);
         if (mp4) {
           const updBtn = document.createElement("a");
@@ -402,303 +427,33 @@
       card.appendChild(thumb);
       card.appendChild(meta);
       elGrid.appendChild(card);
-
-      // Load media blob url and render
-      (async () => {
-        try {
-          const url = await getBlobUrlForFile(activeFolder, f.name);
-          thumb.textContent = "";
-          if (isVideo) {
-            const vv = document.createElement("video");
-            vv.src = url;
-            vv.controls = true;
-            vv.muted = true;
-            vv.playsInline = true;
-            vv.preload = "metadata";
-            thumb.appendChild(vv);
-          } else {
-            const img = document.createElement("img");
-            img.loading = "lazy";
-            img.src = url;
-            img.alt = f.name;
-            thumb.appendChild(img);
-          }
-        } catch (err) {
-          thumb.textContent = "Load failed";
-          console.error(err);
-        }
-      })();
     }
   }
 
-  /** ---------- JSON GENERATOR ---------- */
-  function cdnUrl(folder, file) {
-    return `${CDN_BASE}${folder}/${file}`;
-  }
+  /** ---------- LIST ---------- */
+  function renderFolders(list) {
+    elFolders.innerHTML = "";
+    const q = elQ.value.trim().toLowerCase();
+    const shown = list.filter(f => f.name.toLowerCase().includes(q));
+    elFolderCount.textContent = `${shown.length}/${list.length}`;
 
-  function parseBase3(name) {
-    // prefix_003.ext
-    const m = name.match(/^([a-z0-9]+)_(\d{3})\.(\w+)$/i);
-    if (!m) return null;
-    return { prefix: m[1].toLowerCase(), idx: Number(m[2]), ext: m[3].toLowerCase(), base: `${m[1]}_${m[2]}` };
-  }
-
-  function parsePreview(name) {
-    // prefix_003_preview.webp
-    const m = name.match(/^([a-z0-9]+)_(\d{3})_preview\.webp$/i);
-    if (!m) return null;
-    return { prefix: m[1].toLowerCase(), idx: Number(m[2]), base: `${m[1]}_${m[2]}` };
-  }
-
-  function parseDouble(name) {
-    // double_001_0.webp / double_001_1.webp
-    const m = name.match(/^(double)_(\d{3})_(0|1)\.webp$/i);
-    if (!m) return null;
-    return { idx: Number(m[2]), part: Number(m[3]), base: `double_${m[2]}` };
-  }
-
-  function parseDays(name) {
-    // days_001_6h.webp / 12h / 18h / 24h
-    const m = name.match(/^(days)_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
-    if (!m) return null;
-    const hourKey = m[3].toLowerCase();
-    const hourMap = { "6h":"06:00", "12h":"12:00", "18h":"18:00", "24h":"24:00" };
-    return { idx: Number(m[2]), hourKey, hour: hourMap[hourKey] || "", base: `days_${m[2]}` };
-  }
-
-  function buildCategoryJsonItems(folder, files) {
-    const now = Math.floor(Date.now() / 1000);
-    const names = files.map(x => x.name);
-    const fileSet = new Set(names);
-
-    // preview map: base -> preview file
-    const previewByBase = new Map();
-    for (const fn of names) {
-      const pv = parsePreview(fn);
-      if (pv) previewByBase.set(pv.base, fn);
-    }
-
-    // DOUBLE groups
-    const doubleGroups = new Map(); // base -> {0,1}
-    for (const fn of names) {
-      const d = parseDouble(fn);
-      if (!d) continue;
-      if (!doubleGroups.has(d.base)) doubleGroups.set(d.base, {});
-      doubleGroups.get(d.base)[String(d.part)] = fn;
-    }
-
-    // DAYS groups
-    const daysGroups = new Map(); // base -> arr
-    for (const fn of names) {
-      const d = parseDays(fn);
-      if (!d) continue;
-      if (!daysGroups.has(d.base)) daysGroups.set(d.base, []);
-      daysGroups.get(d.base).push({ file: fn, hourKey: d.hourKey, hour: d.hour });
-    }
-
-    // LIVE/STILL/COUPLE groups by base
-    const baseGroups = new Map(); // base -> {prefix, idx, mp4?, webp?}
-    for (const fn of names) {
-      if (isPreviewName(fn)) continue;
-      if (parseDouble(fn) || parseDays(fn)) continue;
-
-      const p = parseBase3(fn);
-      if (!p) continue;
-
-      if (!baseGroups.has(p.base)) baseGroups.set(p.base, { prefix: p.prefix, idx: p.idx, mp4: null, webp: null });
-      const g = baseGroups.get(p.base);
-      if (p.ext === "mp4") g.mp4 = fn;
-      if (p.ext === "webp") g.webp = fn;
-    }
-
-    const items = [];
-
-    // DOUBLE
-    for (const [base, parts] of doubleGroups.entries()) {
-      const medias = [];
-      if (parts["0"]) medias.push({ url: cdnUrl(folder, parts["0"]), name: parts["0"], thumbUrl: "", contentType: "image/webp" });
-      if (parts["1"]) medias.push({ url: cdnUrl(folder, parts["1"]), name: parts["1"], thumbUrl: "", contentType: "image/webp" });
-      if (!medias.length) continue;
-
-      items.push({
-        id: `${folder}_${base.split("_").pop()}`,
-        medias,
-        categoryId: folder,
-        isPremium: true,
-        createdAt: now,
-        subType: 0,
-        type: TYPE.DOUBLE,
-        coinToUnlock: 0
-      });
-    }
-
-    // DAYS
-    for (const [base, arr] of daysGroups.entries()) {
-      const order = { "6h":6, "12h":12, "18h":18, "24h":24 };
-      const sorted = arr.slice().sort((a,b)=>(order[a.hourKey]||0)-(order[b.hourKey]||0));
-
-      const medias = sorted.map(x => ({
-        url: cdnUrl(folder, x.file),
-        name: x.file,
-        thumbUrl: "",
-        hour: x.hour,
-        contentType: "image/webp"
-      }));
-      if (!medias.length) continue;
-
-      items.push({
-        id: `${folder}_${base.split("_").pop()}`,
-        medias,
-        categoryId: folder,
-        isPremium: true,
-        createdAt: now,
-        subType: 0,
-        type: TYPE.DAYS,
-        coinToUnlock: 0
-      });
-    }
-
-    // LIVE / STILL / COUPLE
-    for (const [base, g] of baseGroups.entries()) {
-      // require webp at least
-      const webpName = g.webp || `${base}.webp`;
-      if (!fileSet.has(webpName)) continue;
-
-      let t;
-      if ((g.prefix || "") === "couple") t = TYPE.COUPLE;
-      else if (g.mp4) t = TYPE.LIVE;
-      else t = TYPE.STILL;
-
-      const medias = [];
-      if (t === TYPE.LIVE) {
-        if (g.mp4) {
-          medias.push({
-            url: cdnUrl(folder, g.mp4),
-            name: g.mp4,
-            thumbUrl: "",
-            contentType: "video/mp4"
-          });
-        }
-        const pv = previewByBase.get(base);
-        medias.push({
-          url: cdnUrl(folder, webpName),
-          name: webpName,
-          thumbUrl: pv ? cdnUrl(folder, pv) : "",
-          contentType: "image/webp"
-        });
-      } else {
-        const pv = previewByBase.get(base);
-        medias.push({
-          url: cdnUrl(folder, webpName),
-          name: webpName,
-          thumbUrl: pv ? cdnUrl(folder, pv) : "",
-          contentType: "image/webp"
-        });
-      }
-
-      items.push({
-        id: `${folder}_${String(g.idx).padStart(3,"0")}`,
-        medias,
-        categoryId: folder,
-        isPremium: true,
-        createdAt: now,
-        subType: 0,
-        type: t,
-        coinToUnlock: 0
-      });
-    }
-
-    // sort + createdAt stable
-    items.sort((a,b)=>{
-      const ai = Number((a.id||"").split("_").pop()) || 0;
-      const bi = Number((b.id||"").split("_").pop()) || 0;
-      return ai - bi;
-    });
-    for (let i=0;i<items.length;i++) items[i].createdAt = now + i;
-
-    return items;
-  }
-
-  function base64EncodeUtf8(str) {
-    const bytes = new TextEncoder().encode(str);
-    let binary = "";
-    for (const b of bytes) binary += String.fromCharCode(b);
-    return btoa(binary);
-  }
-
-  async function getExistingFileSha(repoPath) {
-    try {
-      const meta = await fetchJson(ghContentsUrl(repoPath), true);
-      return meta?.sha || null;
-    } catch (e) {
-      const msg = String(e?.message || e);
-      if (msg.includes("HTTP 404")) return null;
-      return null;
+    for (const f of shown) {
+      const div = document.createElement("div");
+      div.className = "folder" + (activeFolder === f.name ? " active" : "");
+      div.innerHTML = `<span>📁 ${f.name}</span><span class="small">open</span>`;
+      div.onclick = () => openFolder(f.name);
+      elFolders.appendChild(div);
     }
   }
 
-  async function putFileToGitHub(repoPath, contentText, commitMsg) {
-    const token = getAuthToken();
-    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(repoPath)}`;
-
-    const sha = await getExistingFileSha(repoPath);
-    const body = {
-      message: commitMsg,
-      content: base64EncodeUtf8(contentText),
-      branch: BRANCH
-    };
-    if (sha) body.sha = sha;
-
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> "");
-      throw new Error(`PUT failed: HTTP ${res.status}\n${txt}`);
-    }
-  }
-
-  async function generateJsonForActiveFolder() {
-    if (!activeFolder) { alert("Bạn chưa chọn folder."); return; }
-    if (!activeFiles?.length) { alert("Folder đang trống hoặc chưa load."); return; }
-
-    const items = buildCategoryJsonItems(activeFolder, activeFiles);
-    const jsonText = JSON.stringify(items, null, 2);
-
-    const jsonFileName = `${activeFolder}.json`;
-    const repoPath = `${ROOT_DIR}/${activeFolder}/${jsonFileName}`;
-
-    const ok = confirm(
-      `Generate & upload JSON?\n\n` +
-      `Folder: ${activeFolder}\n` +
-      `File: ${repoPath}\n` +
-      `Items: ${items.length}\n\n` +
-      `⚠️ Sẽ tạo mới hoặc ghi đè file JSON trong repo.`
-    );
-    if (!ok) return;
-
-    setStatus(`Generating JSON...\n${repoPath}\nitems=${items.length}`);
-    await putFileToGitHub(repoPath, jsonText, `Generate ${jsonFileName}`);
-    setStatus(`✅ Generated!\n${repoPath}\nitems=${items.length}\n\nTip: reload folder để thấy file JSON.`);
-    await openFolder(activeFolder);
-  }
-
-  /** ---------- LOADERS ---------- */
   async function loadFolders() {
-    setStatus("Loading folders... (API-only requires token)");
+    setStatus("Loading folders...");
     elTitle.textContent = "Chọn folder";
     elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}`;
     elItemCount.textContent = "";
     elGrid.innerHTML = "";
 
-    const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
+    const data = await fetchJson(ghContentsUrl(ROOT_DIR), false);
 
     allFolders = data
       .filter(x => x.type === "dir")
@@ -719,7 +474,7 @@
     elGrid.innerHTML = "";
 
     const path = `${ROOT_DIR}/${folderName}`;
-    const data = await fetchJson(ghContentsUrl(path), true);
+    const data = await fetchJson(ghContentsUrl(path), false);
 
     activeFiles = data
       .filter(x => x.type === "file")
@@ -730,11 +485,378 @@
     await renderGrid(activeFiles);
   }
 
+  /** =========================
+   *  JSON GENERATOR (ALL)
+   *  Rules:
+   *   - scan folders in resources/ matching /^\d+_/
+   *   - infer type by filename prefix:
+   *       couple_*           => type=4, medias=[{webp(+preview)}]
+   *       double_<id>_0/1    => type=2, medias=[_0.webp, _1.webp]
+   *       days_<id>_6h/12h/18h/24h => type=3, medias with hour
+   *       default:
+   *         has mp4 + webp   => type=0 (LIVE)
+   *         only webp        => type=1 (STILL)
+   *   - thumbUrl uses *_preview.webp if exists else ""
+   *   - id: `${categoryId}_${NNN}` (NNN extracted from base name)
+   *   - createdAt: Date.now()/1000 (unix seconds) at generation time
+   *   - isPremium: true, subType:0, coinToUnlock:0
+   *  ========================= */
+
+  function pad3(n) {
+    const s = String(n);
+    if (s.length >= 3) return s;
+    return ("000" + s).slice(-3);
+  }
+
+  function mimeFor(ext) {
+    ext = ext.toLowerCase();
+    if (ext === "webp") return "image/webp";
+    if (ext === "png") return "image/png";
+    if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+    if (ext === "gif") return "image/gif";
+    if (ext === "mp4") return "video/mp4";
+    if (ext === "webm") return "video/webm";
+    if (ext === "mov") return "video/quicktime";
+    return "application/octet-stream";
+  }
+
+  function byName(files) {
+    const m = new Map();
+    for (const f of files) m.set(f.name, f);
+    return m;
+  }
+
+  function listNames(files) { return files.map(x => x.name); }
+
+  function parseNumberFromName(name) {
+    // try find last _NNN before extension or before extra suffix
+    // examples:
+    // anime_003.webp -> 3
+    // double_001_0.webp -> 1
+    // days_001_6h.webp -> 1
+    const base = name.replace(/\.[^.]+$/, "");
+    const m = base.match(/_(\d{1,})$/);
+    if (m) return parseInt(m[1], 10);
+
+    const m2 = base.match(/_(\d{1,})_(?:0|1)$/);
+    if (m2) return parseInt(m2[1], 10);
+
+    const m3 = base.match(/_(\d{1,})_(?:6h|12h|18h|24h)$/);
+    if (m3) return parseInt(m3[1], 10);
+
+    // fallback: any 3 digits
+    const m4 = base.match(/(\d{3})/);
+    if (m4) return parseInt(m4[1], 10);
+
+    return null;
+  }
+
+  function detectPrefix(files) {
+    // pick first non-preview media file and use prefix before last _NNN
+    const names = listNames(files).filter(n => isMediaFile(n) && !isPreviewName(n));
+    for (const n of names) {
+      const base = n.replace(/\.[^.]+$/, "");
+      // remove trailing parts like _0/_1/_6h...
+      const cleaned = base
+        .replace(/_(?:0|1)$/, "")
+        .replace(/_(?:6h|12h|18h|24h)$/, "");
+      const m = cleaned.match(/^(.*)_\d+$/);
+      if (m) return m[1];
+    }
+    return "";
+  }
+
+  function buildItemLive(categoryId, prefix, num, hasPreview, createdAtSec) {
+    const nnn = pad3(num);
+    const mp4Name = `${prefix}_${nnn}.mp4`;
+    const webpName = `${prefix}_${nnn}.webp`;
+    const previewName = `${prefix}_${nnn}_preview.webp`;
+
+    const medias = [
+      {
+        url: mediaUrl(categoryId, mp4Name),
+        name: mp4Name,
+        thumbUrl: "",
+        contentType: "video/mp4"
+      },
+      {
+        url: mediaUrl(categoryId, webpName),
+        name: webpName,
+        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
+        contentType: "image/webp"
+      }
+    ];
+
+    return {
+      id: `${categoryId}_${nnn}`,
+      medias,
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.LIVE,
+      coinToUnlock: 0
+    };
+  }
+
+  function buildItemStill(categoryId, prefix, num, hasPreview, createdAtSec) {
+    const nnn = pad3(num);
+    const webpName = `${prefix}_${nnn}.webp`;
+    const previewName = `${prefix}_${nnn}_preview.webp`;
+
+    const medias = [
+      {
+        url: mediaUrl(categoryId, webpName),
+        name: webpName,
+        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
+        contentType: "image/webp"
+      }
+    ];
+
+    return {
+      id: `${categoryId}_${nnn}`,
+      medias,
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.STILL,
+      coinToUnlock: 0
+    };
+  }
+
+  function buildItemCouple(categoryId, num, hasPreview, createdAtSec) {
+    const nnn = pad3(num);
+    const webpName = `couple_${nnn}.webp`;
+    const previewName = `couple_${nnn}_preview.webp`;
+
+    const medias = [
+      {
+        url: mediaUrl(categoryId, webpName),
+        name: webpName,
+        thumbUrl: hasPreview ? mediaUrl(categoryId, previewName) : "",
+        contentType: "image/webp"
+      }
+    ];
+
+    return {
+      id: `${categoryId}_${nnn}`,
+      medias,
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.COUPLE,
+      coinToUnlock: 0
+    };
+  }
+
+  function buildItemDouble(categoryId, num, createdAtSec) {
+    const nnn = pad3(num);
+    const a = `double_${nnn}_0.webp`;
+    const b = `double_${nnn}_1.webp`;
+
+    const medias = [
+      { url: mediaUrl(categoryId, a), name: a, thumbUrl: "", contentType: "image/webp" },
+      { url: mediaUrl(categoryId, b), name: b, thumbUrl: "", contentType: "image/webp" }
+    ];
+
+    return {
+      id: `${categoryId}_${nnn}`,
+      medias,
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.DOUBLE,
+      coinToUnlock: 0
+    };
+  }
+
+  function buildItemDays(categoryId, num, createdAtSec) {
+    const nnn = pad3(num);
+    const slots = [
+      { suf: "6h", hour: "06:00" },
+      { suf: "12h", hour: "12:00" },
+      { suf: "18h", hour: "18:00" },
+      { suf: "24h", hour: "24:00" }
+    ];
+    const medias = slots.map(s => {
+      const name = `days_${nnn}_${s.suf}.webp`;
+      return {
+        url: mediaUrl(categoryId, name),
+        name,
+        thumbUrl: "",
+        hour: s.hour,
+        contentType: "image/webp"
+      };
+    });
+
+    return {
+      id: `${categoryId}_${nnn}`,
+      medias,
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.DAYS,
+      coinToUnlock: 0
+    };
+  }
+
+  function generateItemsForFolder(categoryId, files) {
+    const createdAtSec = Math.floor(Date.now() / 1000);
+
+    const nameMap = byName(files);
+    const names = new Set(listNames(files));
+
+    // detect based on filename prefixes
+    const hasAny = (re) => {
+      for (const n of names) if (re.test(n)) return true;
+      return false;
+    };
+
+    // Collect numbers for each type
+    const nums = new Set();
+
+    // couple
+    for (const n of names) {
+      const m = n.match(/^couple_(\d+)\.webp$/);
+      if (m) nums.add(parseInt(m[1], 10));
+    }
+
+    // double
+    for (const n of names) {
+      const m = n.match(/^double_(\d+)_(0|1)\.webp$/);
+      if (m) nums.add(parseInt(m[1], 10));
+    }
+
+    // days
+    for (const n of names) {
+      const m = n.match(/^days_(\d+)_(6h|12h|18h|24h)\.webp$/);
+      if (m) nums.add(parseInt(m[1], 10));
+    }
+
+    // default (anime/silly/whatever): detect prefix
+    const prefix = detectPrefix(files); // e.g. anime, silly...
+    if (prefix) {
+      for (const n of names) {
+        // base media: prefix_NNN.(mp4|webp)
+        const m = n.match(new RegExp(`^${prefix}_(\\d+)\\.(mp4|webp)$`));
+        if (m) nums.add(parseInt(m[1], 10));
+      }
+    }
+
+    const sortedNums = [...nums].sort((a,b)=>a-b);
+    const items = [];
+
+    for (const num of sortedNums) {
+      const nnn = pad3(num);
+
+      // COUPLE
+      const coupleWebp = `couple_${nnn}.webp`;
+      if (names.has(coupleWebp)) {
+        const hasPreview = names.has(`couple_${nnn}_preview.webp`);
+        items.push(buildItemCouple(categoryId, num, hasPreview, createdAtSec));
+        continue;
+      }
+
+      // DOUBLE
+      const d0 = `double_${nnn}_0.webp`;
+      const d1 = `double_${nnn}_1.webp`;
+      if (names.has(d0) && names.has(d1)) {
+        items.push(buildItemDouble(categoryId, num, createdAtSec));
+        continue;
+      }
+
+      // DAYS
+      const day6 = `days_${nnn}_6h.webp`;
+      const day12 = `days_${nnn}_12h.webp`;
+      const day18 = `days_${nnn}_18h.webp`;
+      const day24 = `days_${nnn}_24h.webp`;
+      if (names.has(day6) && names.has(day12) && names.has(day18) && names.has(day24)) {
+        items.push(buildItemDays(categoryId, num, createdAtSec));
+        continue;
+      }
+
+      // DEFAULT (LIVE/STILL)
+      if (prefix) {
+        const mp4 = `${prefix}_${nnn}.mp4`;
+        const webp = `${prefix}_${nnn}.webp`;
+        const preview = `${prefix}_${nnn}_preview.webp`;
+        const hasPreview = names.has(preview);
+
+        const hasMp4 = names.has(mp4);
+        const hasWebp = names.has(webp);
+
+        if (hasMp4 && hasWebp) {
+          items.push(buildItemLive(categoryId, prefix, num, hasPreview, createdAtSec));
+          continue;
+        }
+        if (hasWebp) {
+          items.push(buildItemStill(categoryId, prefix, num, hasPreview, createdAtSec));
+          continue;
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async function listFolderFiles(folderName) {
+    const path = `${ROOT_DIR}/${folderName}`;
+    const data = await fetchJson(ghContentsUrl(path), false);
+    return data
+      .filter(x => x.type === "file")
+      .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
+      .sort((a,b) => a.name.localeCompare(b.name, "en"));
+  }
+
+  async function generateAllJsonAndUpload() {
+    try {
+      // need token to write
+      getAuthToken();
+
+      setStatus("Generating ALL JSON...\nScanning folders 101_, 102_, ...");
+      const root = await fetchJson(ghContentsUrl(ROOT_DIR), false);
+
+      const folders = root
+        .filter(x => x.type === "dir")
+        .map(x => x.name)
+        .filter(name => /^\d+_/.test(name))
+        .sort((a,b) => a.localeCompare(b, "en"));
+
+      let allItems = [];
+      for (let i=0;i<folders.length;i++) {
+        const folderName = folders[i];
+        setStatus(`Generating ALL JSON...\n(${i+1}/${folders.length}) ${folderName}`);
+        const files = await listFolderFiles(folderName);
+        const items = generateItemsForFolder(folderName, files);
+        allItems = allItems.concat(items);
+      }
+
+      // Output is array only (as you requested “gộp thành 1 json”)
+      const jsonText = JSON.stringify(allItems, null, 2);
+
+      setStatus(`Uploading...\n${ALL_JSON_PATH}\nItems: ${allItems.length}`);
+      await upsertTextFile(
+        ALL_JSON_PATH,
+        jsonText,
+        `Generate ${ALL_JSON_PATH} (${allItems.length} items)`
+      );
+
+      setStatus(`✅ Done!\nWrote: ${ALL_JSON_PATH}\nItems: ${allItems.length}\n\nAPI:\nhttps://${OWNER}.github.io/${REPO}/dev/wallpaper.json`);
+      alert(`✅ Generate ALL JSON OK!\nItems: ${allItems.length}\nWrote: ${ALL_JSON_PATH}`);
+    } catch (err) {
+      console.error(err);
+      setStatus(`❌ Failed:\n${String(err?.message || err)}`);
+      alert(String(err?.message || err));
+    }
+  }
+
+  /** ---------- EVENTS ---------- */
   document.getElementById("reload").onclick = () => loadFolders();
-  elGenJson.onclick = async () => {
-    try { await generateJsonForActiveFolder(); }
-    catch (e) { alert(String(e?.message || e)); }
-  };
+  document.getElementById("genAll").onclick = () => generateAllJsonAndUpload();
 
   elQ.addEventListener("input", () => {
     renderFolders(allFolders);
