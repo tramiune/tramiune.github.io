@@ -49,7 +49,6 @@
           width:120px; aspect-ratio: 9/16; background:#f2f2f2; display:flex; align-items:center; justify-content:center;
           overflow:hidden;
         }
-        /* QUAN TRỌNG: để không "ăn drag" */
         .thumb img, .thumb video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
         .meta { padding:10px 10px 10px 0; }
         .name { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -61,11 +60,10 @@
           cursor:grab; user-select:none;
           padding:6px 8px; border:1px dashed #ddd; border-radius:10px;
           display:inline-flex; gap:6px; align-items:center;
-          touch-action:none; /* để kéo trên mobile mượt */
+          touch-action:none;
         }
         .handle:active { cursor:grabbing; }
 
-        /* dragging ghost */
         .drag-ghost {
           position: fixed;
           z-index: 9999;
@@ -89,7 +87,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE tick preview</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -105,6 +103,8 @@
 
     <button id="genAll">Generate JSON (ALL like browser)</button>
     <span class="mut" id="rate"></span>
+
+    <a class="btn" href="./browser.html" target="_blank" rel="noreferrer">🧭 Browser</a>
 </header>
 
 <div class="wrap">
@@ -132,7 +132,7 @@
 
 <script>
     /** =========================
-     *  CONFIG (giống browser)
+     *  CONFIG
      *  ========================= */
     const OWNER = "tramiune";
     const REPO  = "tramiune001_res_wallpaper";
@@ -161,7 +161,7 @@
     const elToken = document.getElementById("token");
     const elRememberToken = document.getElementById("rememberToken");
 
-    let allFolders = [];          // [{name,path}]
+    let allFolders = [];
     let activeFolder = null;
     let folderCache = new Map();  // folderName -> { files:[name], items:[item] }
 
@@ -169,7 +169,7 @@
       version: 1,
       updatedAt: 0,
       categories: {
-        // [categoryId]: { order:[ids], liveUsePreview:{[id]:boolean} }
+        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{} }
       }
     };
 
@@ -227,20 +227,23 @@
       return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(BRANCH)}`;
     }
 
-    /** ========= token localStorage ========= */
-    const LS_TOKEN = `orders_token_${OWNER}_${REPO}`;
+    /** ========= token localStorage =========
+     *  để tiện: ưu tiên key orders, fallback key browser
+     */
+    const LS_TOKEN_ORDERS = `orders_token_${OWNER}_${REPO}`;
+    const LS_TOKEN_BROWSER = `wallpaper_browser_token_${OWNER}_${REPO}`;
     (function initToken(){
-      const saved = localStorage.getItem(LS_TOKEN);
+      const saved = localStorage.getItem(LS_TOKEN_ORDERS) || localStorage.getItem(LS_TOKEN_BROWSER);
       if (saved) { elToken.value = saved; elRememberToken.checked = true; }
       elRememberToken.addEventListener("change", () => {
         if (elRememberToken.checked) {
-          if (elToken.value.trim()) localStorage.setItem(LS_TOKEN, elToken.value.trim());
+          if (elToken.value.trim()) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
         } else {
-          localStorage.removeItem(LS_TOKEN);
+          localStorage.removeItem(LS_TOKEN_ORDERS);
         }
       });
       elToken.addEventListener("input", () => {
-        if (elRememberToken.checked) localStorage.setItem(LS_TOKEN, elToken.value.trim());
+        if (elRememberToken.checked) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
       });
     })();
 
@@ -261,7 +264,6 @@
       const token = getAuthToken();
       const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}`;
 
-      // check sha if exists
       let sha = null;
       try {
         const meta = await fetchJson(apiUrl + `?ref=${encodeURIComponent(BRANCH)}`, true);
@@ -292,7 +294,12 @@
     /** ========= Orders helpers ========= */
     function ensureCategoryState(catId){
       if (!ordersState.categories[catId]) {
-        ordersState.categories[catId] = { order: [], liveUsePreview: {} };
+        ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {} };
+      } else {
+        // migrate nếu file cũ chưa có
+        ordersState.categories[catId].liveUsePreview ||= {};
+        ordersState.categories[catId].coupleUsePreview ||= {};
+        ordersState.categories[catId].order ||= [];
       }
       return ordersState.categories[catId];
     }
@@ -314,21 +321,11 @@
       return out;
     }
 
-    /** ========= Build items (GIỐNG LOGIC browser bạn muốn) =========
-     * Rule:
-     * - LIVE: có mp4 + webp cùng số -> type=0, medias[0]=video, medias[1]=image, thumbUrl=preview (tùy checkbox)
-     * - STILL: chỉ webp -> type=1
-     * - COUPLE: file bắt đầu couple_... -> type=4
-     * - DOUBLE: double_###_0.webp + double_###_1.webp -> type=2 (2 ảnh)
-     * - DAYS: days_###_6h/12h/18h/24h.webp -> type=3 (4 ảnh có hour)
-     *
-     * ID: KHÔNG TRÙNG -> mặc định id = `${categoryId}_${num}` (num 3 chữ số)
-     */
+    /** ========= Build items from folder files ========= */
     function buildItemsFromFiles(folderName, fileNames) {
       const categoryId = folderName;
-      const defPrefix = folderDefaultPrefix(folderName);
+      const previewByBaseImage = new Map(); // baseImage -> previewFile
 
-      const previewByBaseImage = new Map(); // key: baseImageName -> previewFileName
       for (const name of fileNames) {
         const m = name.match(/^(.*)_(\d{1,})_preview\.webp$/i);
         if (m) {
@@ -337,19 +334,15 @@
         }
       }
 
-      // group for special types
       const doubleByNum = new Map(); // num -> {0,1}
       const daysByNum = new Map();   // num -> Map(hour -> file)
       const coupleByNum = new Map(); // num -> {single,0,1,preview}
 
-      // live/still sets: key prefix|num
-      const mp4ByKey = new Map();
-      const imgByKey = new Map();
+      const mp4ByKey = new Map();    // prefix|num -> file
+      const imgByKey = new Map();    // prefix|num -> file
 
       for (const name of fileNames) {
-        // skip preview files in base scanning
         if (isPreviewName(name)) {
-          // couple preview
           const cm = name.match(/^couple_(\d{1,})_preview\.webp$/i);
           if (cm) {
             const num = pad3(cm[1]);
@@ -360,7 +353,6 @@
           continue;
         }
 
-        // DOUBLE
         let m = name.match(/^double_(\d{1,})_([01])\.webp$/i);
         if (m) {
           const num = pad3(m[1]);
@@ -371,7 +363,6 @@
           continue;
         }
 
-        // DAYS
         m = name.match(/^days_(\d{1,})_(\d{1,2})h\.webp$/i);
         if (m) {
           const num = pad3(m[1]);
@@ -382,7 +373,6 @@
           continue;
         }
 
-        // COUPLE
         m = name.match(/^couple_(\d{1,})\.webp$/i);
         if (m) {
           const num = pad3(m[1]);
@@ -401,7 +391,6 @@
           continue;
         }
 
-        // LIVE / STILL (prefix_num)
         const e = extOf(name);
 
         if (VIDEO_EXT.includes(e)) {
@@ -416,9 +405,7 @@
         }
 
         if (IMAGE_EXT.includes(e)) {
-          // ignore double/days/couple variants already handled
           if (/^(double_|days_|couple_)/i.test(name)) continue;
-
           m = name.match(/^(.*)_(\d{1,})\.(webp|png|jpg|jpeg|gif)$/i);
           if (m) {
             const prefix = m[1];
@@ -432,7 +419,7 @@
       let createdAt = Math.floor(Date.now()/1000);
       const items = [];
 
-      // DOUBLE items
+      // DOUBLE
       for (const [num, obj] of [...doubleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         if (!obj["0"] || !obj["1"]) continue;
         items.push({
@@ -451,7 +438,7 @@
         });
       }
 
-      // DAYS items
+      // DAYS
       for (const [num, hm] of [...daysByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         const order = ["6","12","18","24"];
         const medias = [];
@@ -480,22 +467,32 @@
         });
       }
 
-      // COUPLE items
+      // COUPLE
       for (const [num, obj] of [...coupleByNum.entries()].sort((a,b)=>a[0].localeCompare(b[0]))) {
         const medias = [];
+        let couplePreviewUrl = "";
+
         if (obj.single) {
-          const preview = obj.preview ? cdnUrl(folderName, obj.preview) : (previewByBaseImage.get(obj.single) ? cdnUrl(folderName, previewByBaseImage.get(obj.single)) : "");
+          const previewFile =
+            obj.preview
+            || previewByBaseImage.get(obj.single)
+            || null;
+
+          couplePreviewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
+
           medias.push({
             url: cdnUrl(folderName, obj.single),
             name: obj.single,
-            thumbUrl: preview || "",
+            thumbUrl: couplePreviewUrl || "",
             contentType: "image/webp"
           });
         } else {
           if (obj["0"]) medias.push({ url: cdnUrl(folderName, obj["0"]), name: obj["0"], thumbUrl:"", contentType:"image/webp" });
           if (obj["1"]) medias.push({ url: cdnUrl(folderName, obj["1"]), name: obj["1"], thumbUrl:"", contentType:"image/webp" });
         }
+
         if (!medias.length) continue;
+
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
@@ -505,11 +502,13 @@
           type: TYPE.COUPLE,
           coinToUnlock: 0,
           medias,
-          _thumb: medias[0].thumbUrl || medias[0].url
+          _couplePreviewUrl: couplePreviewUrl,
+          _hasPreview: !!couplePreviewUrl,
+          _thumb: (medias[0].thumbUrl || medias[0].url)
         });
       }
 
-      // LIVE / STILL items
+      // LIVE / STILL
       const keys = new Set([...mp4ByKey.keys(), ...imgByKey.keys()]);
       const sortedKeys = [...keys].sort((a,b)=>{
         const na=a.split("|")[1], nb=b.split("|")[1];
@@ -521,12 +520,9 @@
         const [prefix, num] = key.split("|");
         const mp4 = mp4ByKey.get(key);
         const img = imgByKey.get(key);
-
-        // ID theo browser: nếu prefix == defPrefix thì id = folder_num, còn khác prefix thì vẫn dùng folder_num (để không bị lệch) -> bạn muốn giống browser (category_num)
         const id = `${categoryId}_${num}`;
 
         if (mp4) {
-          // LIVE
           const previewFile = img ? previewByBaseImage.get(img) : null;
           const previewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
 
@@ -543,7 +539,7 @@
               ...(img ? [{
                 url: cdnUrl(folderName, img),
                 name: img,
-                thumbUrl: previewUrl, // sẽ bật/tắt theo checkbox
+                thumbUrl: previewUrl,
                 contentType: contentTypeFromExt(img)
               }] : [])
             ],
@@ -552,7 +548,6 @@
             _thumb: (previewUrl || (img ? cdnUrl(folderName, img) : cdnUrl(folderName, mp4)))
           });
         } else if (img) {
-          // STILL
           items.push({
             id,
             categoryId,
@@ -569,15 +564,14 @@
         }
       }
 
-      // IMPORTANT: nếu trùng id trong cùng folder (do file lỗi), để Orders vẫn render được:
+      // fallback chống trùng id trong 1 folder (UI ổn định)
       const seen = new Map();
       for (const it of items) {
         const c = (seen.get(it.id) || 0) + 1;
         seen.set(it.id, c);
-        if (c > 1) it.id = `${it.id}_${c}`; // chỉ để UI/Orders ổn, khi export sẽ unique global tiếp
+        if (c > 1) it.id = `${it.id}_${c}`;
       }
 
-      // sort ổn định theo id
       items.sort((a,b)=>a.id.localeCompare(b.id,"en"));
       return items;
     }
@@ -614,21 +608,12 @@
         const thumb = document.createElement("div");
         thumb.className = "thumb";
 
-        // thumb
         const thumbSrc = it._thumb || (it.medias[0]?.url || "");
-        if ((it.medias[0]?.contentType || "").startsWith("video/") && it.type === TYPE.LIVE && !it.medias.find(m => (m.contentType||"").startsWith("image/"))) {
-          const v = document.createElement("video");
-          v.src = thumbSrc;
-          v.muted = true; v.playsInline = true; v.loop = true; v.autoplay = true;
-          v.preload = "metadata";
-          thumb.appendChild(v);
-        } else {
-          const img = document.createElement("img");
-          img.loading = "lazy";
-          img.src = thumbSrc;
-          img.alt = it.id;
-          thumb.appendChild(img);
-        }
+        const imgEl = document.createElement("img");
+        imgEl.loading = "lazy";
+        imgEl.src = thumbSrc;
+        imgEl.alt = it.id;
+        thumb.appendChild(imgEl);
 
         const meta = document.createElement("div");
         meta.className = "meta";
@@ -651,7 +636,7 @@
         openBtn.rel = "noreferrer";
         actions.appendChild(openBtn);
 
-        // LIVE preview toggle (chỉ LIVE)
+        // ===== LIVE preview toggle =====
         if (it.type === TYPE.LIVE) {
           const hasPreview = !!it._hasPreview;
           const defaultChecked = hasPreview ? (st.liveUsePreview[it.id] ?? true) : false;
@@ -667,14 +652,13 @@
           cb.onchange = () => {
             st.liveUsePreview[it.id] = cb.checked;
 
-            // update data ngay để generate
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
 
-            // update thumb UI ngay
-            const thumbImg = row.querySelector(".thumb img");
-            if (thumbImg && imgMedia) {
-              thumbImg.src = (imgMedia.thumbUrl || imgMedia.url);
+            // update thumb UI
+            if (imgMedia) {
+              it._thumb = (imgMedia.thumbUrl || imgMedia.url);
+              imgEl.src = it._thumb;
             }
           };
 
@@ -690,26 +674,60 @@
           }
         }
 
+        // ===== COUPLE preview toggle (NEW) =====
+        if (it.type === TYPE.COUPLE) {
+          const hasPreview = !!it._hasPreview;
+          const defaultChecked = hasPreview ? (st.coupleUsePreview[it.id] ?? true) : false;
+
+          const lb = document.createElement("label");
+          lb.className = "mut";
+          lb.title = "Tick: medias[0].thumbUrl dùng couple_###_preview.webp. Bỏ tick: thumbUrl = \"\"";
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.disabled = !hasPreview;
+          cb.checked = defaultChecked;
+
+          cb.onchange = () => {
+            st.coupleUsePreview[it.id] = cb.checked;
+
+            const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._couplePreviewUrl || "") : "";
+
+            // update thumb UI
+            if (imgMedia) {
+              it._thumb = (imgMedia.thumbUrl || imgMedia.url);
+              imgEl.src = it._thumb;
+            }
+          };
+
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(" use preview thumb"));
+          actions.appendChild(lb);
+
+          if (!hasPreview) {
+            const h = document.createElement("div");
+            h.className = "hint";
+            h.textContent = "COUPLE này không có preview";
+            actions.appendChild(h);
+          }
+        }
+
         meta.appendChild(actions);
         row.appendChild(thumb);
         row.appendChild(meta);
         elList.appendChild(row);
       }
 
-      // enable pointer-drag reorder
       enablePointerSort(elList, catId);
     }
 
-    /** ========= Pointer Sort (kéo chắc chắn được) ========= */
+    /** ========= Pointer Sort ========= */
     function enablePointerSort(container, catId){
-      // remove old listeners bằng cách clone? (đơn giản)
-      // nhưng tránh clone vì mất checkbox state. Ta chỉ gắn listener lên handle từng item.
       const items = [...container.querySelectorAll(".item")];
 
       let draggingEl = null;
       let ghost = null;
       let placeholder = null;
-      let startY = 0, startX = 0;
       let offsetX = 0, offsetY = 0;
 
       function cleanup(){
@@ -730,7 +748,6 @@
         g.style.left = r.left + r.width/2 + "px";
         g.style.top  = r.top + r.height/2 + "px";
         g.style.width = r.width + "px";
-        // remove videos autoplay in ghost (optional)
         g.querySelectorAll("video").forEach(v => { try { v.pause(); } catch{} });
         document.body.appendChild(g);
         return g;
@@ -756,7 +773,7 @@
             closest = el;
           }
         }
-        return closest; // null => append end
+        return closest;
       }
 
       function onMove(e){
@@ -777,7 +794,6 @@
       function onUp(e){
         e.preventDefault();
         if (!draggingEl || !placeholder) return cleanup();
-
         container.insertBefore(draggingEl, placeholder);
         cleanup();
       }
@@ -797,14 +813,11 @@
           ghost = createGhostFrom(it);
           placeholder = createPlaceholder(it);
 
-          // compute offsets so ghost follows pointer nicely
-          startX = e.clientX; startY = e.clientY;
           offsetX = e.clientX - rect.left;
           offsetY = e.clientY - rect.top;
 
-          // place placeholder where original item was
           container.insertBefore(placeholder, it);
-          it.remove(); // remove original, we'll reinsert on drop
+          it.remove();
 
           document.addEventListener("pointermove", onMove, {passive:false});
           document.addEventListener("pointerup", onUp, {passive:false});
@@ -849,18 +862,24 @@
         folderCache.set(folderName, { files, items });
       }
 
-      // apply saved live preview choice
+      // apply saved LIVE/COUPLE preview choice
       const st = ensureCategoryState(folderName);
+
       for (const it of items) {
         if (it.type === TYPE.LIVE) {
           const use = (st.liveUsePreview[it.id] ?? true);
           const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
           if (imgMedia) imgMedia.thumbUrl = use ? (it._livePreviewUrl || "") : "";
-          it._thumb = (imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb);
+          it._thumb = imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb;
+        }
+        if (it.type === TYPE.COUPLE) {
+          const use = (st.coupleUsePreview[it.id] ?? true);
+          const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+          if (imgMedia) imgMedia.thumbUrl = use ? (it._couplePreviewUrl || "") : "";
+          it._thumb = imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb;
         }
       }
 
-      // apply order list
       const ordered = applyOrder(folderName, items);
       setStatus(`Loaded ${items.length} items.`);
       renderItems(folderName, ordered);
@@ -894,9 +913,7 @@
 
       setStatus("Generating ALL...");
 
-      // ensure current folder order sync before gen
       if (activeFolder) syncOrderFromDOM(activeFolder);
-
       const used = new Set();
       const out = [];
       let createdAt = Math.floor(Date.now()/1000);
@@ -916,14 +933,19 @@
           folderCache.set(folderName, { files, items });
         }
 
-        // apply order and live preview toggle (the “orders” rule)
         const st = ensureCategoryState(folderName);
 
+        // apply toggles before export
         for (const it of items) {
           if (it.type === TYPE.LIVE) {
             const use = (st.liveUsePreview[it.id] ?? true);
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = use ? (it._livePreviewUrl || "") : "";
+          }
+          if (it.type === TYPE.COUPLE) {
+            const use = (st.coupleUsePreview[it.id] ?? true);
+            const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
+            if (imgMedia) imgMedia.thumbUrl = use ? (it._couplePreviewUrl || "") : "";
           }
         }
 
@@ -932,14 +954,9 @@
         for (const it of ordered) {
           const id = uniqId(it.id, used);
 
-          // IMPORTANT: export đúng format browser
           const exportItem = {
             id,
-            medias: it.medias.map(m => {
-              const mm = { ...m };
-              // giữ hour nếu có (DAYS)
-              return mm;
-            }),
+            medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
             isPremium: true,
             createdAt: createdAt++,
@@ -947,7 +964,6 @@
             type: it.type,
             coinToUnlock: 0
           };
-
           out.push(exportItem);
         }
       }
