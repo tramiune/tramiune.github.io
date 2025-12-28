@@ -106,7 +106,7 @@
   const BRANCH = "main";           // đổi nếu repo bạn là master
   const ROOT_DIR = "resources";
 
-  // JSON rule yêu cầu dùng jsdelivr CDN
+  // JSON rule: dùng jsdelivr CDN
   const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
   const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
@@ -211,12 +211,10 @@
     const token = getAuthToken(); // API-only => bắt buộc token
     const filePath = `${ROOT_DIR}/${folderName}/${fileName}`;
 
-    // lấy download_url qua contents API
     const meta = await fetchJson(ghContentsUrl(filePath), true);
     const dl = meta?.download_url;
     if (!dl) throw new Error(`No download_url for ${filePath}`);
 
-    // tải blob
     const res = await fetch(dl, { headers: { "Authorization": `Bearer ${token}` } }).catch(() => fetch(dl));
     if (!res.ok) {
       const txt = await res.text().catch(()=> "");
@@ -226,7 +224,6 @@
     const url = URL.createObjectURL(blob);
 
     blobUrlCache.set(key, { url, ts: Date.now() });
-    // giới hạn cache
     if (blobUrlCache.size > MAX_CACHE) {
       const oldestKey = [...blobUrlCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0]?.[0];
       if (oldestKey) {
@@ -235,7 +232,6 @@
         blobUrlCache.delete(oldestKey);
       }
     }
-
     return url;
   }
 
@@ -295,25 +291,6 @@
     const q = elQ.value.trim().toLowerCase();
     const showPreview = elShowPreview.checked;
 
-    // preview map
-    const previewByBase = new Map();
-    for (const f of files) {
-      if (!isMediaFile(f.name)) continue;
-      if (!isPreviewName(f.name)) continue;
-      const base = f.name.replace("_preview.", ".");
-      previewByBase.set(base, f.name);
-    }
-
-    // mp4 map
-    const mp4ByBase = new Map();
-    for (const f of files) {
-      const e = extOf(f.name);
-      if (VIDEO_EXT.includes(e)) {
-        const base = f.name.slice(0, f.name.lastIndexOf("."));
-        mp4ByBase.set(base, f.name);
-      }
-    }
-
     let shown = files
       .filter(f => isMediaFile(f.name))
       .filter(f => f.name.toLowerCase().includes(q));
@@ -325,7 +302,6 @@
     for (const f of shown) {
       const e = extOf(f.name);
       const isVideo = VIDEO_EXT.includes(e);
-      const isImage = IMAGE_EXT.includes(e);
 
       const card = document.createElement("div");
       card.className = "card";
@@ -336,14 +312,9 @@
 
       const meta = document.createElement("div");
       meta.className = "meta";
-
-      const maybePreview = previewByBase.get(f.name);
-      const labelPreviewHint =
-        (!isVideo && !isPreviewName(f.name) && maybePreview) ? " · has preview" : "";
-
       meta.innerHTML = `
         <div class="name" title="${f.name}">${f.name}</div>
-        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}${labelPreviewHint}</div>
+        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}</div>
       `;
 
       const actions = document.createElement("div");
@@ -352,7 +323,6 @@
       actions.style.flexWrap = "wrap";
       actions.style.marginTop = "8px";
 
-      // open file (blob)
       const openBtn = document.createElement("a");
       openBtn.className = "btn";
       openBtn.textContent = "🔗 Open";
@@ -368,7 +338,6 @@
       };
       actions.appendChild(openBtn);
 
-      // delete
       const delBtn = document.createElement("button");
       delBtn.textContent = "🗑 Delete";
       delBtn.className = "danger";
@@ -383,7 +352,6 @@
       card.appendChild(meta);
       elGrid.appendChild(card);
 
-      // load media blob url and render
       (async () => {
         try {
           const url = await getBlobUrlForFile(activeFolder, f.name);
@@ -411,10 +379,7 @@
     }
   }
 
-  /** ---------- JSON GENERATOR (same folder) ---------- */
-
-  function pad3(n) { return String(n).padStart(3, "0"); }
-
+  /** ---------- JSON GENERATOR (prefix-based type) ---------- */
   function mimeFromExt(ext) {
     ext = (ext || "").toLowerCase();
     if (ext === "mp4") return "video/mp4";
@@ -431,129 +396,107 @@
     return `${CDN_BASE}${folder}/${file}`;
   }
 
-  function guessCoupleType(folder, baseName) {
-    const f = (folder || "").toLowerCase();
-    const b = (baseName || "").toLowerCase();
-    return (f.includes("couple") || b.startsWith("couple_")) ? TYPE.COUPLE : null;
-  }
-
-  function parseBaseAndIndex(name) {
-    // expects something like anime_003.webp or anime_003.mp4
-    const m = name.match(/^(.+?)_(\d{3})\.(\w+)$/i);
+  function parseBase3(name) {
+    // prefix_003.ext
+    const m = name.match(/^([a-z0-9]+)_(\d{3})\.(\w+)$/i);
     if (!m) return null;
     return { prefix: m[1], idx: Number(m[2]), ext: m[3].toLowerCase(), base: `${m[1]}_${m[2]}` };
   }
 
-  function parseDouble(name) {
-    // double_001_0.webp / double_001_1.webp (prefix arbitrary)
-    const m = name.match(/^(.+?)_(\d{3})_(0|1)\.webp$/i);
+  function parsePreview(name) {
+    // prefix_003_preview.webp
+    const m = name.match(/^([a-z0-9]+)_(\d{3})_preview\.webp$/i);
     if (!m) return null;
-    return { prefix: m[1], idx: Number(m[2]), part: Number(m[3]), base: `${m[1]}_${m[2]}` };
+    return { prefix: m[1], idx: Number(m[2]), base: `${m[1]}_${m[2]}` };
+  }
+
+  function parseDouble(name) {
+    // double_001_0.webp / double_001_1.webp
+    const m = name.match(/^(double)_(\d{3})_(0|1)\.webp$/i);
+    if (!m) return null;
+    return { prefix: "double", idx: Number(m[2]), part: Number(m[3]), base: `double_${m[2]}` };
   }
 
   function parseDays(name) {
-    // days_001_6h.webp / ..._12h.webp / ..._18h.webp / ..._24h.webp
-    const m = name.match(/^(.+?)_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
+    // days_001_6h.webp ...
+    const m = name.match(/^(days)_(\d{3})_(6h|12h|18h|24h)\.webp$/i);
     if (!m) return null;
     const hourKey = m[3].toLowerCase();
     const hourMap = { "6h":"06:00", "12h":"12:00", "18h":"18:00", "24h":"24:00" };
-    return { prefix: m[1], idx: Number(m[2]), hourKey, hour: hourMap[hourKey] || "", base: `${m[1]}_${m[2]}` };
+    return { prefix: "days", idx: Number(m[2]), hourKey, hour: hourMap[hourKey] || "", base: `days_${m[2]}` };
   }
 
   function buildCategoryJsonItems(folder, files) {
-    // collect existence
-    const fileSet = new Set(files.map(x => x.name));
+    const now = Math.floor(Date.now() / 1000);
+    const names = files.map(x => x.name);
+    const fileSet = new Set(names);
 
-    // preview map base -> previewFileName (base with .webp replacement logic)
-    const previewByWebp = new Map(); // key: "<base>.webp" -> "<base>_preview.webp"
-    for (const fn of fileSet) {
-      if (!fn.toLowerCase().endsWith(".webp")) continue;
-      if (!isPreviewName(fn)) continue;
-      const baseWebp = fn.replace("_preview.webp", ".webp");
-      previewByWebp.set(baseWebp, fn);
+    // preview map: base -> preview file
+    const previewByBase = new Map(); // base -> filename
+    for (const fn of names) {
+      const pv = parsePreview(fn);
+      if (pv) previewByBase.set(pv.base, fn);
     }
 
-    // group maps
-    const doubleGroups = new Map(); // base -> {0:file,1:file}
-    const daysGroups = new Map();   // base -> {hourKey:file,hour:string}
-    const liveGroups = new Map();   // base -> { mp4?, webp? }
-
-    // First pass: detect DOUBLE and DAYS explicitly
-    for (const fn of fileSet) {
-      if (isPreviewName(fn)) continue;
-
+    // DOUBLE groups
+    const doubleGroups = new Map(); // base -> {0,1}
+    for (const fn of names) {
       const d = parseDouble(fn);
-      if (d) {
-        if (!doubleGroups.has(d.base)) doubleGroups.set(d.base, {});
-        doubleGroups.get(d.base)[String(d.part)] = fn;
-        continue;
-      }
-
-      const day = parseDays(fn);
-      if (day) {
-        if (!daysGroups.has(day.base)) daysGroups.set(day.base, []);
-        daysGroups.get(day.base).push({ file: fn, hour: day.hour, hourKey: day.hourKey });
-        continue;
-      }
+      if (!d) continue;
+      if (!doubleGroups.has(d.base)) doubleGroups.set(d.base, {});
+      doubleGroups.get(d.base)[String(d.part)] = fn;
     }
 
-    // Second pass: detect LIVE/STILL candidates (base_###)
-    for (const fn of fileSet) {
-      if (isPreviewName(fn)) continue;
+    // DAYS groups
+    const daysGroups = new Map(); // base -> [{file,hourKey,hour}]
+    for (const fn of names) {
+      const d = parseDays(fn);
+      if (!d) continue;
+      if (!daysGroups.has(d.base)) daysGroups.set(d.base, []);
+      daysGroups.get(d.base).push({ file: fn, hourKey: d.hourKey, hour: d.hour });
+    }
 
-      const p = parseBaseAndIndex(fn);
+    // LIVE/STILL/COUPLE groups by base
+    const baseGroups = new Map(); // base -> {prefix, idx, mp4?, webp?}
+    for (const fn of names) {
+      if (isPreviewName(fn)) continue;
+      if (parseDouble(fn) || parseDays(fn)) continue; // handled separately
+
+      const p = parseBase3(fn);
       if (!p) continue;
 
-      // if this base is already DAYS/DOUBLE (because those have extra suffix), skip
-      // NOTE: DAYS/DOUBLE filenames don't match parseBaseAndIndex anyway, so safe
-      if (!liveGroups.has(p.base)) liveGroups.set(p.base, { base: p.base, mp4: null, webp: null });
-      const g = liveGroups.get(p.base);
+      if (!baseGroups.has(p.base)) baseGroups.set(p.base, { prefix: p.prefix, idx: p.idx, mp4: null, webp: null });
+      const g = baseGroups.get(p.base);
       if (p.ext === "mp4") g.mp4 = fn;
       if (p.ext === "webp") g.webp = fn;
     }
 
-    const now = Math.floor(Date.now() / 1000);
-
     const items = [];
 
-    // Build DOUBLE items
+    // DOUBLE items (type=2 always because prefix double)
     for (const [base, parts] of doubleGroups.entries()) {
-      // require 0 and 1 to consider complete; if missing, still include what exists
       const medias = [];
-      if (parts["0"]) medias.push({
-        url: cdnUrl(folder, parts["0"]),
-        name: parts["0"],
-        thumbUrl: "",
-        contentType: "image/webp"
-      });
-      if (parts["1"]) medias.push({
-        url: cdnUrl(folder, parts["1"]),
-        name: parts["1"],
-        thumbUrl: "",
-        contentType: "image/webp"
-      });
+      if (parts["0"]) medias.push({ url: cdnUrl(folder, parts["0"]), name: parts["0"], thumbUrl: "", contentType: "image/webp" });
+      if (parts["1"]) medias.push({ url: cdnUrl(folder, parts["1"]), name: parts["1"], thumbUrl: "", contentType: "image/webp" });
+      if (!medias.length) continue;
 
-      if (medias.length === 0) continue;
-
-      const coupleOverride = guessCoupleType(folder, base);
       items.push({
-        id: `${folder}_${base.split("_").pop()}`, // folder_001 kiểu mẫu
+        id: `${folder}_${base.split("_").pop()}`,
         medias,
         categoryId: folder,
         isPremium: true,
         createdAt: now,
         subType: 0,
-        type: coupleOverride ?? TYPE.DOUBLE,
+        type: TYPE.DOUBLE,
         coinToUnlock: 0
       });
     }
 
-    // Build DAYS items
+    // DAYS items (type=3 always because prefix days)
     for (const [base, arr] of daysGroups.entries()) {
-      const sorted = arr.slice().sort((a,b)=> {
-        const order = { "6h":6, "12h":12, "18h":18, "24h":24 };
-        return (order[a.hourKey]||0) - (order[b.hourKey]||0);
-      });
+      const order = { "6h":6, "12h":12, "18h":18, "24h":24 };
+      const sorted = arr.slice().sort((a,b)=>(order[a.hourKey]||0)-(order[b.hourKey]||0));
+
       const medias = sorted.map(x => ({
         url: cdnUrl(folder, x.file),
         name: x.file,
@@ -561,9 +504,8 @@
         hour: x.hour,
         contentType: "image/webp"
       }));
-      if (medias.length === 0) continue;
+      if (!medias.length) continue;
 
-      const coupleOverride = guessCoupleType(folder, base);
       items.push({
         id: `${folder}_${base.split("_").pop()}`,
         medias,
@@ -571,74 +513,52 @@
         isPremium: true,
         createdAt: now,
         subType: 0,
-        type: coupleOverride ?? TYPE.DAYS,
+        type: TYPE.DAYS,
         coinToUnlock: 0
       });
     }
 
-    // Build LIVE/STILL/COUPLE items
-    for (const [base, g] of liveGroups.entries()) {
-      // Need at least webp or mp4 to create item
-      if (!g.mp4 && !g.webp) continue;
+    // LIVE / STILL / COUPLE
+    for (const [base, g] of baseGroups.entries()) {
+      // require webp at least
+      const webpName = g.webp || `${base}.webp`;
+      if (!fileSet.has(webpName)) continue;
 
-      // determine type:
-      let t = null;
-      const coupleOverride = guessCoupleType(folder, base);
-      if (coupleOverride != null) {
-        // couple folder => treat as COUPLE always (even if only webp)
-        t = TYPE.COUPLE;
-      } else if (g.mp4) {
-        t = TYPE.LIVE;
-      } else {
-        t = TYPE.STILL;
-      }
+      // type by prefix first
+      let t;
+      if ((g.prefix || "").toLowerCase() === "couple") t = TYPE.COUPLE;
+      else if (g.mp4) t = TYPE.LIVE;
+      else t = TYPE.STILL;
 
-      // medias build
       const medias = [];
-
       if (t === TYPE.LIVE) {
-        // mp4
-        medias.push({
-          url: cdnUrl(folder, g.mp4),
-          name: g.mp4,
-          thumbUrl: "",
-          contentType: mimeFromExt("mp4")
-        });
-
-        // webp (prefer base.webp; if missing, try same base .webp)
-        const webpName = g.webp || `${base}.webp`;
-        const thumb = previewByWebp.get(webpName) ? cdnUrl(folder, previewByWebp.get(webpName)) : "";
+        if (g.mp4) {
+          medias.push({
+            url: cdnUrl(folder, g.mp4),
+            name: g.mp4,
+            thumbUrl: "",
+            contentType: mimeFromExt("mp4")
+          });
+        }
+        const pv = previewByBase.get(base);
         medias.push({
           url: cdnUrl(folder, webpName),
           name: webpName,
-          thumbUrl: thumb,
+          thumbUrl: pv ? cdnUrl(folder, pv) : "",
           contentType: "image/webp"
         });
       } else {
-        // STILL / COUPLE => only webp
-        const webpName = g.webp || `${base}.webp`;
-        const thumb = previewByWebp.get(webpName) ? cdnUrl(folder, previewByWebp.get(webpName)) : "";
+        const pv = previewByBase.get(base);
         medias.push({
           url: cdnUrl(folder, webpName),
           name: webpName,
-          thumbUrl: thumb,
+          thumbUrl: pv ? cdnUrl(folder, pv) : "",
           contentType: "image/webp"
         });
-      }
-
-      // If base.webp doesn't exist in folder, skip to avoid broken url
-      // (for LIVE you may still want mp4 only; but your examples always have webp)
-      const needsWebp = (t !== TYPE.DAYS && t !== TYPE.DOUBLE);
-      if (needsWebp) {
-        const webpName = (t === TYPE.LIVE) ? medias[1]?.name : medias[0]?.name;
-        if (webpName && !fileSet.has(webpName)) {
-          // if missing, do not include this item
-          continue;
-        }
       }
 
       items.push({
-        id: `${folder}_${base.split("_").pop()}`,
+        id: `${folder}_${String(g.idx).padStart(3,"0")}`,
         medias,
         categoryId: folder,
         isPremium: true,
@@ -649,23 +569,18 @@
       });
     }
 
-    // sort by id numeric
+    // sort + createdAt stable
     items.sort((a,b)=>{
       const ai = Number((a.id||"").split("_").pop()) || 0;
       const bi = Number((b.id||"").split("_").pop()) || 0;
       return ai - bi;
     });
-
-    // createdAt incremental for stable uniqueness (optional)
-    for (let i=0;i<items.length;i++){
-      items[i].createdAt = now + i;
-    }
+    for (let i=0;i<items.length;i++) items[i].createdAt = now + i;
 
     return items;
   }
 
   function base64EncodeUtf8(str) {
-    // utf8 safe base64
     const bytes = new TextEncoder().encode(str);
     let binary = "";
     for (const b of bytes) binary += String.fromCharCode(b);
@@ -675,10 +590,8 @@
   async function getExistingFileSha(repoPath) {
     try {
       const meta = await fetchJson(ghContentsUrl(repoPath), true);
-      if (meta && meta.sha) return meta.sha;
-      return null;
+      return meta?.sha || null;
     } catch (e) {
-      // 404 => not exist
       const msg = String(e?.message || e);
       if (msg.includes("HTTP 404")) return null;
       return null;
@@ -714,19 +627,12 @@
   }
 
   async function generateJsonForActiveFolder() {
-    if (!activeFolder) {
-      alert("Bạn chưa chọn folder.");
-      return;
-    }
-    if (!activeFiles?.length) {
-      alert("Folder đang trống hoặc chưa load.");
-      return;
-    }
+    if (!activeFolder) { alert("Bạn chưa chọn folder."); return; }
+    if (!activeFiles?.length) { alert("Folder đang trống hoặc chưa load."); return; }
 
-    // build items from activeFiles (includes non-media too -> generator ignores)
     const items = buildCategoryJsonItems(activeFolder, activeFiles);
-
     const jsonText = JSON.stringify(items, null, 2);
+
     const jsonFileName = `${activeFolder}.json`;
     const repoPath = `${ROOT_DIR}/${activeFolder}/${jsonFileName}`;
 
@@ -753,7 +659,6 @@
     elItemCount.textContent = "";
     elGrid.innerHTML = "";
 
-    // API-only => dùng auth để rate-limit cao hơn và tránh fail
     const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
 
     allFolders = data
