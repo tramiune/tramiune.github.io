@@ -20,7 +20,7 @@
         label{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:10px 0;font-size:13px}
         input[type="range"]{width:60%}
         input[type="number"], input[type="password"]{
-          width:150px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px
+          width:160px;padding:6px 8px;border:1px solid var(--bd);border-radius:10px
         }
         button,a.btn{
           border:1px solid var(--bd);background:#fff;padding:8px 10px;border-radius:10px;cursor:pointer;
@@ -74,7 +74,7 @@
     </div>
 
     <div class="card">
-        <div class="hd">Frame → webp (replace) + Trim video (lite)</div>
+        <div class="hd">Frame → webp (replace) + Trim video (MP4 replace)</div>
         <div class="ct">
             <div class="mut">Frame preview (canvas):</div>
             <canvas id="c"></canvas>
@@ -91,7 +91,7 @@
 
             <hr/>
 
-            <div class="mut">Trim video (lite, export .webm):</div>
+            <div class="mut">Trim video:</div>
             <label>
                 <span>Trim start (sec)</span>
                 <input id="start" type="number" min="0" step="0.1" value="0"/>
@@ -100,21 +100,32 @@
                 <span>Trim end (sec)</span>
                 <input id="end" type="number" min="0" step="0.1" value="0"/>
             </label>
+
             <label>
-                <span>Speed</span>
+                <span>Playback speed (preview only)</span>
                 <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1"/>
                 <span class="k" id="speedVal">1.0x</span>
             </label>
 
             <div class="row" style="margin-top:10px">
                 <button id="apply">Apply speed to preview</button>
-                <button id="exportTrim">✂️ Export trimmed</button>
+                <button id="exportTrimWebm">✂️ Export trimmed (WEBM lite)</button>
+                <button id="replaceTrimMp4">♻️ Trim & Replace MP4 on GitHub</button>
+            </div>
+
+            <div class="warn" style="margin-top:10px">
+                <b>Trim & Replace MP4</b> dùng FFmpeg wasm (lần đầu load có thể hơi lâu).<br/>
+                FAST = nhanh (có thể lệch chút nếu không trúng keyframe). PRECISE = chuẩn hơn nhưng chậm.
             </div>
 
             <div class="status" id="status"></div>
         </div>
     </div>
 </main>
+
+<!-- FFmpeg wasm -->
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"></script>
 
 <script>
     /** Repo config */
@@ -187,7 +198,6 @@
       const t = Math.max(0, Math.min(time, v.duration || 0));
       v.pause();
       v.currentTime = t;
-
       await new Promise(resolve => v.addEventListener("seeked", resolve, { once:true }));
       drawFrameToCanvas();
       updateUI();
@@ -300,7 +310,6 @@
       const meta = await ghGetJson(url, token);
       if (!meta?.download_url) throw new Error("Không có download_url (file private?)");
 
-      // download_url là public raw, vẫn có thể CORS; nhưng ta fetch thành blob tại origin của page → canvas OK
       const res = await fetch(meta.download_url);
       if (!res.ok) {
         const txt = await res.text().catch(()=> "");
@@ -325,14 +334,9 @@
 
     async function canvasToWebpBlob(quality) {
       drawFrameToCanvas();
-      try {
-        const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", quality));
-        if (!blob) throw new Error("toBlob failed (webp not supported?)");
-        return blob;
-      } catch (e) {
-        // tainted canvas message
-        throw new Error(`toBlob failed: ${String(e?.message || e)}\n\nFix: load video via GitHub API (token) để tránh CORS taint.`);
-      }
+      const blob = await new Promise(resolve => c.toBlob(resolve, "image/webp", quality));
+      if (!blob) throw new Error("toBlob failed (webp not supported?)");
+      return blob;
     }
 
     document.getElementById("downloadWebp").onclick = async () => {
@@ -353,7 +357,6 @@
         const { video } = qs();
         const out = `${baseName(video)}_preview.webp`;
 
-        // scale nhỏ để làm preview
         drawFrameToCanvas();
         const targetW = 360;
         const scale = targetW / c.width;
@@ -383,15 +386,14 @@
         const blob = await canvasToWebpBlob(0.92);
         await replaceWebpOnGitHub(folder, target, blob);
 
-        // optional: tự reload trang opener
         try { window.opener?.location?.reload?.(); } catch {}
       } catch (e) {
         alert(String(e?.message || e));
       }
     };
 
-    /** ---------- Trim (lite) export .webm (no-audio) ---------- */
-    async function exportTrimWebm(){
+    /** ---------- Export trimmed (WEBM lite) ---------- */
+    async function exportTrimWebmLite(){
       const { video } = qs();
 
       const start = Math.max(0, Number(startEl.value) || 0);
@@ -450,9 +452,153 @@
       setStatus(`✅ Export done\n${out}`);
     }
 
-    document.getElementById("exportTrim").onclick = async () => {
-      try { await exportTrimWebm(); }
+    document.getElementById("exportTrimWebm").onclick = async () => {
+      try { await exportTrimWebmLite(); }
       catch(e){ alert(String(e?.message || e)); }
+    };
+
+    /** =========================
+     *  FFmpeg wasm: Trim MP4 & Replace on GitHub
+     *  ========================= */
+    let _ffmpeg = null;
+
+    async function ensureFFmpegLoaded() {
+      if (_ffmpeg) return _ffmpeg;
+      if (!window.FFmpeg || !window.FFmpeg.createFFmpeg) {
+        throw new Error("FFmpeg wasm chưa load (check script @ffmpeg/ffmpeg).");
+      }
+      const { createFFmpeg, fetchFile } = window.FFmpeg;
+      const ffmpeg = createFFmpeg({
+        log: true,
+        corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"
+      });
+
+      setStatus("Loading FFmpeg (first time only)...\nCó thể mất 10-30s tuỳ mạng.");
+      await ffmpeg.load();
+      setStatus("");
+
+      _ffmpeg = { ffmpeg, fetchFile };
+      return _ffmpeg;
+    }
+
+    async function fetchVideoBlobForTrim(folder, fileName) {
+      const token = getAuthToken();
+      const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
+      const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(BRANCH)}`;
+
+      setStatus(`Fetching source video...\n${filePath}`);
+      const meta = await ghGetJson(url, token);
+      if (!meta?.download_url) throw new Error("Không có download_url.");
+
+      const res = await fetch(meta.download_url);
+      if (!res.ok) {
+        const txt = await res.text().catch(()=> "");
+        throw new Error(`Download failed: HTTP ${res.status}\n${txt}`);
+      }
+      const blob = await res.blob();
+      setStatus("");
+      return blob;
+    }
+
+    async function trimMp4BlobWithFFmpeg(inputMp4Blob, startSec, endSec, mode = "FAST") {
+      const { ffmpeg, fetchFile } = await ensureFFmpegLoaded();
+
+      const start = Math.max(0, Number(startSec) || 0);
+      const end = Math.max(0, Number(endSec) || 0);
+      if (end <= start) throw new Error("Trim end phải > trim start.");
+
+      const inName = "in.mp4";
+      const outName = "out.mp4";
+
+      try { ffmpeg.FS("unlink", inName); } catch {}
+      try { ffmpeg.FS("unlink", outName); } catch {}
+
+      setStatus(`FFmpeg: writing input...\nsize=${Math.round(inputMp4Blob.size/1024/1024)}MB`);
+      ffmpeg.FS("writeFile", inName, await fetchFile(inputMp4Blob));
+
+      setStatus(`FFmpeg: trimming...\nstart=${start}s end=${end}s mode=${mode}`);
+
+      if (mode === "FAST") {
+        await ffmpeg.run(
+          "-ss", String(start),
+          "-to", String(end),
+          "-i", inName,
+          "-c", "copy",
+          outName
+        );
+      } else {
+        await ffmpeg.run(
+          "-ss", String(start),
+          "-to", String(end),
+          "-i", inName,
+          "-c:v", "libx264",
+          "-preset", "veryfast",
+          "-crf", "23",
+          "-movflags", "+faststart",
+          "-an",
+          outName
+        );
+      }
+
+      const data = ffmpeg.FS("readFile", outName);
+      const outBlob = new Blob([data.buffer], { type: "video/mp4" });
+      setStatus("");
+      return outBlob;
+    }
+
+    async function replaceVideoOnGitHub(folder, fileName, mp4Blob) {
+      const token = getAuthToken();
+      const filePath = `${ROOT_DIR}/${folder}/${fileName}`;
+      setStatus(`Uploading trimmed mp4...\n→ ${filePath}`);
+
+      const sha = await getFileSha(filePath, token);
+      const content = await blobToBase64NoPrefix(mp4Blob);
+
+      await ghPutJson(
+        `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`,
+        token,
+        { message: `Trim & replace ${filePath}`, content, sha, branch: BRANCH }
+      );
+
+      setStatus(`✅ Replaced video on GitHub\n${filePath}`);
+    }
+
+    document.getElementById("replaceTrimMp4").onclick = async () => {
+      try {
+        const { folder, video } = qs();
+        if (!folder || !video) throw new Error("Thiếu folder/video.");
+
+        // validate times
+        const start = Math.max(0, Number(startEl.value) || 0);
+        const endIn = Math.max(0, Number(endEl.value) || 0);
+        if (!v.duration || Number.isNaN(v.duration)) throw new Error("Video chưa load xong.");
+        const end = (endIn <= 0 || endIn > v.duration) ? v.duration : endIn;
+        if (end <= start) throw new Error("Trim end phải > trim start.");
+
+        // pick mode
+        const mode = confirm("OK = FAST (nhanh)\nCancel = PRECISE (chính xác hơn, chậm)") ? "FAST" : "PRECISE";
+
+        // 1) fetch source mp4
+        const srcBlob = await fetchVideoBlobForTrim(folder, video);
+
+        // 2) trim mp4
+        const outBlob = await trimMp4BlobWithFFmpeg(srcBlob, start, end, mode);
+
+        // 3) replace to GitHub (same mp4 name)
+        await replaceVideoOnGitHub(folder, video, outBlob);
+
+        // 4) reload preview locally with trimmed blob
+        try {
+          const blobUrl = URL.createObjectURL(outBlob);
+          v.pause();
+          v.src = blobUrl;
+          await v.play().catch(()=>{});
+        } catch {}
+
+        try { window.opener?.location?.reload?.(); } catch {}
+      } catch (e) {
+        alert(String(e?.message || e));
+      }
     };
 
     /** ---------- init ---------- */
@@ -471,28 +617,26 @@
       v.crossOrigin = "anonymous";
 
       // Strategy:
-      // - replaceImage: luôn dùng GitHub API (blob url) để tránh tainted canvas
-      // - edit: nếu có token thì cũng dùng API cho chắc; nếu không thì dùng CDN
+      // - replaceImage: luôn dùng GitHub API blob (đảm bảo canvas OK)
+      // - edit: nếu có token thì dùng API blob cho chắc; không có token thì dùng CDN (xem nhanh)
       try {
         let src;
         if (mode === "replaceImage") {
-          setWarn("Mode replaceImage: video sẽ được tải qua GitHub API (token) để tránh lỗi CORS tainted canvas.");
+          setWarn("Mode replaceImage: video tải qua GitHub API (token) để tránh lỗi CORS tainted canvas.");
           src = await loadVideoViaGitHubApi(folder, video);
         } else {
           const hasToken = !!(tokenEl.value || "").trim();
           if (hasToken) {
-            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame.");
+            setWarn("Có token: dùng GitHub API (blob) để tránh CORS taint khi export frame/trim.");
             src = await loadVideoViaGitHubApi(folder, video);
           } else {
-            setWarn("Không có token: dùng CDN. Nếu bạn export frame bị lỗi 'Tainted canvas', hãy nhập token để tải video qua GitHub API.");
+            setWarn("Không có token: dùng CDN. Nếu export frame bị lỗi 'Tainted canvas' hoặc muốn Trim&Replace, hãy nhập token.");
             src = mediaUrlCdn(folder, video);
           }
         }
-
         v.src = src;
       } catch (e) {
         setWarn(String(e?.message || e));
-        // fallback CDN (chỉ để xem)
         v.src = mediaUrlCdn(folder, video);
       }
 
