@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Wallpaper Browser (GitHub API only)</title>
+  <title>Wallpaper Browser</title>
   <style>
     :root { --bd:#e7e7e7; --mut:#666; }
     body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
@@ -13,48 +13,42 @@
     header input[type="text"], header input[type="password"] {
       padding:8px 10px; border:1px solid var(--bd); border-radius:10px; min-width:220px;
     }
-    header button {
+    header button, header a.btn {
       padding:8px 10px; border:1px solid var(--bd); background:#fff; border-radius:10px; cursor:pointer;
+      text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
     }
-    header button:hover { background:#f5f5f5; }
+    header button:hover, header a.btn:hover { background:#f5f5f5; }
     label.mut { display:inline-flex; gap:6px; align-items:center; }
     input[type="checkbox"] { transform: translateY(1px); }
-
     .wrap { display:grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 64px); }
     aside { border-right:1px solid var(--bd); padding:10px; overflow:auto; }
     main { padding:12px; overflow:auto; }
-
     .folder {
       padding:9px 10px; border:1px solid var(--bd); border-radius:12px; cursor:pointer;
       display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;
     }
     .folder:hover { background:#f7f7f7; }
     .folder.active { border-color:#bbb; background:#f5f5f5; }
-
     .small { font-size:12px; color:var(--mut); }
     .status { font-size:12px; color:var(--mut); white-space:pre-wrap; margin: 6px 0 10px; }
 
     .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }
     .card { border:1px solid var(--bd); border-radius:14px; overflow:hidden; background:#fff; }
     .thumb { width:100%; aspect-ratio: 9/16; background:#f2f2f2; display:flex; align-items:center; justify-content:center; }
-    img, video { width:100%; height:100%; object-fit:cover; display:block; }
+    img { width:100%; height:100%; object-fit:cover; display:block; }
+    video { width:100%; height:100%; object-fit:cover; display:block; }
     .meta { padding:8px 10px; border-top:1px solid var(--bd); }
     .meta .name { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; margin-top:6px; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    a { color: inherit; }
     .danger { border-color:#f0c1c1 !important; }
-
-    a.btn{
-      border:1px solid var(--bd); background:#fff; padding:8px 10px; border-radius:10px;
-      cursor:pointer; text-decoration:none; color:inherit; display:inline-flex; gap:6px; align-items:center;
-    }
-    a.btn:hover{ background:#f5f5f5; }
   </style>
 </head>
 <body>
 <header>
   <b>Wallpaper Browser</b>
-  <span class="mut">API-only: list folder/file + load media via GitHub API blob URL</span>
+  <span class="mut">List folder → click → show ảnh/video (GitHub Contents API) · View via CDN</span>
 
   <input id="q" type="text" placeholder="Filter folder/file..." />
 
@@ -70,6 +64,7 @@
   </label>
 
   <button id="reload">Reload</button>
+  <a class="btn" href="./trim_dispatch.html">✂️ Trim (Actions)</a>
   <span class="mut" id="rate"></span>
 </header>
 
@@ -102,8 +97,9 @@
    *  ========================= */
   const OWNER = "tramiune";
   const REPO  = "tramiune001_res_wallpaper";
-  const BRANCH = "main";           // đổi nếu repo bạn là master
+  const BRANCH = "main";
   const ROOT_DIR = "resources";
+  const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
   const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
   const VIDEO_EXT = ["mp4","webm","mov"];
@@ -126,11 +122,10 @@
   let activeFolder = null;
   let activeFiles = [];
 
-  /** cache blob url theo "folder/file" */
-  const blobUrlCache = new Map(); // key -> { url, ts }
-  const MAX_CACHE = 120;
-
   function setStatus(s) { elStatus.textContent = s || ""; }
+
+  function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
+
   function extOf(name) {
     const i = name.lastIndexOf(".");
     return i >= 0 ? name.slice(i+1).toLowerCase() : "";
@@ -139,34 +134,217 @@
     const e = extOf(name);
     return IMAGE_EXT.includes(e) || VIDEO_EXT.includes(e);
   }
-  function isPreviewName(name) { return name.includes("_preview."); }
-
-  function encodePath(path) { return path.split("/").map(encodeURIComponent).join("/"); }
-  function ghContentsUrl(path) {
-    const p = encodePath(path);
-    return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${p}?ref=${encodeURIComponent(BRANCH)}`;
+  function isPreviewName(name) {
+    return name.includes("_preview.");
   }
 
-  function getAuthToken() {
-    const t = elToken.value.trim();
-    if (!t) throw new Error("Bạn chưa nhập GitHub token (cần Contents: write).");
-    return t;
+  function ghApi(path) {
+    // NOTE: contents endpoint expects path segments; keep encode simple
+    return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(BRANCH)}`;
   }
 
-  async function fetchJson(url, withAuth = false) {
-    const headers = { "Accept": "application/vnd.github+json" };
-    if (withAuth) headers["Authorization"] = `Bearer ${getAuthToken()}`;
-
-    const res = await fetch(url, { headers });
+  async function fetchJson(url) {
+    const res = await fetch(url, { headers: { "Accept": "application/vnd.github+json" } });
     const limit = res.headers.get("x-ratelimit-limit");
     const remain = res.headers.get("x-ratelimit-remaining");
     if (limit && remain) elRate.textContent = `GitHub API rate: ${remain}/${limit}`;
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> "");
+      throw new Error(`HTTP ${res.status} when GET ${url}\n${txt}`);
+    }
+    return res.json();
+  }
+
+  function renderFolders(list) {
+    elFolders.innerHTML = "";
+    const q = elQ.value.trim().toLowerCase();
+    const shown = list.filter(f => f.name.toLowerCase().includes(q));
+    elFolderCount.textContent = `${shown.length}/${list.length}`;
+
+    for (const f of shown) {
+      const div = document.createElement("div");
+      div.className = "folder" + (activeFolder === f.name ? " active" : "");
+      div.innerHTML = `<span>📁 ${f.name}</span><span class="small">open</span>`;
+      div.onclick = () => openFolder(f.name);
+      elFolders.appendChild(div);
+    }
+  }
+
+  function mediaUrl(folderName, fileName) {
+    return `${CDN_BASE}${folderName}/${fileName}`;
+  }
+
+  async function deleteFileOnGitHub(filePath, sha) {
+    const token = (elToken.value || "").trim();
+    if (!token) throw new Error("Bạn chưa nhập GitHub token (cần Contents: write).");
+
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`;
+
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: `Delete ${filePath}`,
+        sha,
+        branch: BRANCH
+      })
+    });
 
     if (!res.ok) {
       const txt = await res.text().catch(()=> "");
-      throw new Error(`HTTP ${res.status}\n${txt}`);
+      throw new Error(`Delete failed: HTTP ${res.status}\n${txt}`);
     }
-    return res.json();
+  }
+
+  async function deleteFileFlow(f) {
+    if (!activeFolder) return;
+    const filePath = `${ROOT_DIR}/${activeFolder}/${f.name}`;
+    const ok = confirm(`Xoá file khỏi GitHub?\n\n${filePath}\n\n⚠️ Không undo được (trừ khi bạn git revert).`);
+    if (!ok) return;
+
+    setStatus(`Deleting...\n${filePath}`);
+    await deleteFileOnGitHub(filePath, f.sha);
+    setStatus(`✅ Deleted\n${filePath}`);
+    await openFolder(activeFolder);
+  }
+
+  function renderGrid(files) {
+    elGrid.innerHTML = "";
+    const q = elQ.value.trim().toLowerCase();
+    const showPreview = elShowPreview.checked;
+
+    // map base -> preview
+    const previewByBase = new Map();
+    for (const f of files) {
+      if (!isMediaFile(f.name)) continue;
+      if (!isPreviewName(f.name)) continue;
+      const base = f.name.replace("_preview.", ".");
+      previewByBase.set(base, f.name);
+    }
+
+    let shown = files
+      .filter(f => isMediaFile(f.name))
+      .filter(f => f.name.toLowerCase().includes(q));
+
+    if (!showPreview) shown = shown.filter(f => !isPreviewName(f.name));
+
+    elItemCount.textContent = `Items: ${shown.length}`;
+
+    for (const f of shown) {
+      const e = extOf(f.name);
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const thumb = document.createElement("div");
+      thumb.className = "thumb";
+
+      // IMPORTANT: only use preview file for static images, not for videos
+      const maybePreview = previewByBase.get(f.name);
+      const url = (!isPreviewName(f.name) && maybePreview && IMAGE_EXT.includes(e))
+        ? mediaUrl(activeFolder, maybePreview)
+        : mediaUrl(activeFolder, f.name);
+
+      if (VIDEO_EXT.includes(e)) {
+        const v = document.createElement("video");
+        v.src = url;
+        v.controls = true;
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = "metadata";
+        thumb.appendChild(v);
+      } else {
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.src = url;
+        img.alt = f.name;
+        thumb.appendChild(img);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML = `
+        <div class="name" title="${f.name}">${f.name}</div>
+        <div class="pill">${VIDEO_EXT.includes(e) ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}</div>
+        <div class="small" style="margin-top:6px;">
+          <a href="${mediaUrl(activeFolder, f.name)}" target="_blank" rel="noreferrer">open file</a>
+        </div>
+      `;
+
+      // ✂️ Trim via GitHub Actions (only for videos)
+      if (VIDEO_EXT.includes(e)) {
+        const trimBtn = document.createElement("button");
+        trimBtn.textContent = "✂️ Trim (Actions)";
+        trimBtn.style.marginTop = "8px";
+        trimBtn.onclick = () => {
+          const url =
+            `./trim_dispatch.html` +
+            `?folder=${encodeURIComponent(activeFolder)}` +
+            `&video=${encodeURIComponent(f.name)}`;
+          window.open(url, "_blank");
+        };
+        meta.appendChild(trimBtn);
+      }
+
+      // Delete button
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑 Delete";
+      delBtn.className = "danger";
+      delBtn.style.marginTop = "8px";
+      delBtn.onclick = async () => {
+        try {
+          await deleteFileFlow(f);
+        } catch (err) {
+          alert(String(err?.message || err));
+        }
+      };
+      meta.appendChild(delBtn);
+
+      card.appendChild(thumb);
+      card.appendChild(meta);
+      elGrid.appendChild(card);
+    }
+  }
+
+  async function loadFolders() {
+    setStatus("Loading folders...");
+    elTitle.textContent = "Chọn folder";
+    elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}`;
+    elItemCount.textContent = "";
+    elGrid.innerHTML = "";
+
+    const data = await fetchJson(ghApi(ROOT_DIR));
+    allFolders = data
+      .filter(x => x.type === "dir")
+      .map(x => ({ name: x.name, path: x.path }))
+      .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+    renderFolders(allFolders);
+    setStatus("");
+  }
+
+  async function openFolder(folderName) {
+    activeFolder = folderName;
+    renderFolders(allFolders);
+
+    elTitle.textContent = `📁 ${folderName}`;
+    elSubtitle.textContent = `${ROOT_DIR}/${folderName}`;
+    setStatus("Loading files...");
+    elGrid.innerHTML = "";
+
+    const path = `${ROOT_DIR}/${folderName}`;
+    const data = await fetchJson(ghApi(path));
+
+    activeFiles = data
+      .filter(x => x.type === "file")
+      .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
+      .sort((a,b) => a.name.localeCompare(b.name, "en"));
+
+    setStatus("");
+    renderGrid(activeFiles);
   }
 
   /** remember token (localStorage) */
@@ -188,285 +366,6 @@
       if (elRemember.checked) localStorage.setItem(LS_KEY, elToken.value.trim());
     });
   })();
-
-  /** ---------- MEDIA LOAD via API -> blob URL ---------- */
-  async function getBlobUrlForFile(folderName, fileName) {
-    const key = `${folderName}/${fileName}`;
-    const cached = blobUrlCache.get(key);
-    if (cached?.url) return cached.url;
-
-    const token = getAuthToken(); // API-only => bắt buộc token
-    const filePath = `${ROOT_DIR}/${folderName}/${fileName}`;
-
-    // lấy download_url qua contents API
-    const meta = await fetchJson(ghContentsUrl(filePath), true);
-    const dl = meta?.download_url;
-    if (!dl) throw new Error(`No download_url for ${filePath}`);
-
-    // tải blob
-    const res = await fetch(dl, { headers: { "Authorization": `Bearer ${token}` } }).catch(() => fetch(dl));
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> "");
-      throw new Error(`Download failed: HTTP ${res.status}\n${txt}`);
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    blobUrlCache.set(key, { url, ts: Date.now() });
-    // giới hạn cache
-    if (blobUrlCache.size > MAX_CACHE) {
-      const oldestKey = [...blobUrlCache.entries()].sort((a,b)=>a[1].ts-b[1].ts)[0]?.[0];
-      if (oldestKey) {
-        const old = blobUrlCache.get(oldestKey);
-        try { URL.revokeObjectURL(old.url); } catch {}
-        blobUrlCache.delete(oldestKey);
-      }
-    }
-
-    return url;
-  }
-
-  function renderFolders(list) {
-    elFolders.innerHTML = "";
-    const q = elQ.value.trim().toLowerCase();
-    const shown = list.filter(f => f.name.toLowerCase().includes(q));
-    elFolderCount.textContent = `${shown.length}/${list.length}`;
-
-    for (const f of shown) {
-      const div = document.createElement("div");
-      div.className = "folder" + (activeFolder === f.name ? " active" : "");
-      div.innerHTML = `<span>📁 ${f.name}</span><span class="small">open</span>`;
-      div.onclick = () => openFolder(f.name);
-      elFolders.appendChild(div);
-    }
-  }
-
-  /** ---------- DELETE ---------- */
-  async function deleteFileOnGitHub(filePath, sha) {
-    const token = getAuthToken();
-    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(filePath)}`;
-
-    const res = await fetch(url, {
-      method: "DELETE",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ message: `Delete ${filePath}`, sha, branch: BRANCH })
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(()=> "");
-      throw new Error(`Delete failed: HTTP ${res.status}\n${txt}`);
-    }
-  }
-
-  async function deleteFileFlow(f) {
-    if (!activeFolder) return;
-    const filePath = `${ROOT_DIR}/${activeFolder}/${f.name}`;
-
-    const ok = confirm(`Xoá file khỏi GitHub?\n\n${filePath}\n\n⚠️ Không undo được (trừ khi bạn git revert).`);
-    if (!ok) return;
-
-    setStatus(`Deleting...\n${filePath}`);
-    await deleteFileOnGitHub(filePath, f.sha);
-
-    setStatus(`✅ Deleted\n${filePath}`);
-    await openFolder(activeFolder);
-  }
-
-  /** ---------- GRID ---------- */
-  async function renderGrid(files) {
-    elGrid.innerHTML = "";
-    const q = elQ.value.trim().toLowerCase();
-    const showPreview = elShowPreview.checked;
-
-    // preview map
-    const previewByBase = new Map();
-    for (const f of files) {
-      if (!isMediaFile(f.name)) continue;
-      if (!isPreviewName(f.name)) continue;
-      const base = f.name.replace("_preview.", ".");
-      previewByBase.set(base, f.name);
-    }
-
-    // mp4 map
-    const mp4ByBase = new Map();
-    for (const f of files) {
-      const e = extOf(f.name);
-      if (VIDEO_EXT.includes(e)) {
-        const base = f.name.slice(0, f.name.lastIndexOf("."));
-        mp4ByBase.set(base, f.name);
-      }
-    }
-
-    let shown = files
-      .filter(f => isMediaFile(f.name))
-      .filter(f => f.name.toLowerCase().includes(q));
-
-    if (!showPreview) shown = shown.filter(f => !isPreviewName(f.name));
-
-    elItemCount.textContent = `Items: ${shown.length}`;
-
-    for (const f of shown) {
-      const e = extOf(f.name);
-      const isVideo = VIDEO_EXT.includes(e);
-      const isImage = IMAGE_EXT.includes(e);
-
-      const card = document.createElement("div");
-      card.className = "card";
-
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
-      thumb.textContent = "Loading...";
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-
-      const maybePreview = previewByBase.get(f.name);
-      const labelPreviewHint =
-        (!isVideo && !isPreviewName(f.name) && maybePreview) ? " · has preview" : "";
-
-      meta.innerHTML = `
-        <div class="name" title="${f.name}">${f.name}</div>
-        <div class="pill">${isVideo ? "video" : "image"} · ${e}${isPreviewName(f.name) ? " · preview" : ""}${labelPreviewHint}</div>
-      `;
-
-      const actions = document.createElement("div");
-      actions.style.display = "flex";
-      actions.style.gap = "8px";
-      actions.style.flexWrap = "wrap";
-      actions.style.marginTop = "8px";
-
-      // open file (blob)
-      const openBtn = document.createElement("a");
-      openBtn.className = "btn";
-      openBtn.textContent = "🔗 Open";
-      openBtn.href = "#";
-      openBtn.onclick = async (ev) => {
-        ev.preventDefault();
-        try {
-          const url = await getBlobUrlForFile(activeFolder, f.name);
-          window.open(url, "_blank", "noopener,noreferrer");
-        } catch (err) {
-          alert(String(err?.message || err));
-        }
-      };
-      actions.appendChild(openBtn);
-
-      // delete
-      const delBtn = document.createElement("button");
-      delBtn.textContent = "🗑 Delete";
-      delBtn.className = "danger";
-      delBtn.onclick = async () => {
-        try { await deleteFileFlow(f); }
-        catch (err) { alert(String(err?.message || err)); }
-      };
-      actions.appendChild(delBtn);
-
-      // edit video
-      if (isVideo) {
-        const editBtn = document.createElement("a");
-        editBtn.textContent = "✂️ Edit";
-        editBtn.className = "btn";
-        editBtn.href = `./video_editor.html?mode=edit&folder=${encodeURIComponent(activeFolder)}&video=${encodeURIComponent(f.name)}`;
-        editBtn.target = "_blank";
-        actions.appendChild(editBtn);
-      }
-
-      // update image from mp4
-      const isNormalWebp = isImage && e === "webp" && !isPreviewName(f.name);
-      if (isNormalWebp) {
-        const base = f.name.slice(0, f.name.lastIndexOf("."));
-        const mp4 = mp4ByBase.get(base);
-        if (mp4) {
-          const updBtn = document.createElement("a");
-          updBtn.textContent = "🔄 Update";
-          updBtn.className = "btn";
-          updBtn.href =
-            `./video_editor.html?mode=replaceImage` +
-            `&folder=${encodeURIComponent(activeFolder)}` +
-            `&video=${encodeURIComponent(mp4)}` +
-            `&target=${encodeURIComponent(f.name)}`;
-          updBtn.target = "_blank";
-          actions.appendChild(updBtn);
-        }
-      }
-
-      meta.appendChild(actions);
-      card.appendChild(thumb);
-      card.appendChild(meta);
-      elGrid.appendChild(card);
-
-      // load media blob url and render
-      (async () => {
-        try {
-          const url = await getBlobUrlForFile(activeFolder, f.name);
-          thumb.textContent = "";
-          if (isVideo) {
-            const vv = document.createElement("video");
-            vv.src = url;
-            vv.controls = true;
-            vv.muted = true;
-            vv.playsInline = true;
-            vv.preload = "metadata";
-            thumb.appendChild(vv);
-          } else {
-            const img = document.createElement("img");
-            img.loading = "lazy";
-            img.src = url;
-            img.alt = f.name;
-            thumb.appendChild(img);
-          }
-        } catch (err) {
-          thumb.textContent = "Load failed";
-          console.error(err);
-        }
-      })();
-    }
-  }
-
-  /** ---------- LOADERS ---------- */
-  async function loadFolders() {
-    setStatus("Loading folders... (API-only requires token)");
-    elTitle.textContent = "Chọn folder";
-    elSubtitle.textContent = `${OWNER}/${REPO}/${ROOT_DIR}`;
-    elItemCount.textContent = "";
-    elGrid.innerHTML = "";
-
-    // API-only => dùng auth để rate-limit cao hơn và tránh fail
-    const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
-
-    allFolders = data
-      .filter(x => x.type === "dir")
-      .map(x => ({ name: x.name, path: x.path }))
-      .sort((a,b) => a.name.localeCompare(b.name, "en"));
-
-    renderFolders(allFolders);
-    setStatus("");
-  }
-
-  async function openFolder(folderName) {
-    activeFolder = folderName;
-    renderFolders(allFolders);
-
-    elTitle.textContent = `📁 ${folderName}`;
-    elSubtitle.textContent = `${ROOT_DIR}/${folderName}`;
-    setStatus("Loading files...");
-    elGrid.innerHTML = "";
-
-    const path = `${ROOT_DIR}/${folderName}`;
-    const data = await fetchJson(ghContentsUrl(path), true);
-
-    activeFiles = data
-      .filter(x => x.type === "file")
-      .map(x => ({ name: x.name, size: x.size || 0, sha: x.sha }))
-      .sort((a,b) => a.name.localeCompare(b.name, "en"));
-
-    setStatus("");
-    await renderGrid(activeFiles);
-  }
 
   document.getElementById("reload").onclick = () => loadFolders();
   elQ.addEventListener("input", () => {
