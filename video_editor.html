@@ -122,6 +122,9 @@
     </div>
 </main>
 
+if (typeof SharedArrayBuffer === "undefined") {
+window.SharedArrayBuffer = ArrayBuffer;
+}
 <!-- ✅ FFmpeg single-thread (không cần SharedArrayBuffer) -->
 <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.1/dist/ffmpeg.min.js"></script>
 <script>
