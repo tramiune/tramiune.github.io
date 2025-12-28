@@ -507,218 +507,204 @@
     return set;
   }
 
-  function generateItemsForFolderStrict(categoryId, files) {
-    const createdAtSec = Math.floor(Date.now() / 1000);
-    const names = groupFiles(files);
+ function generateItemsForFolderStrict(categoryId, files) {
+  const createdAtSec = Math.floor(Date.now() / 1000);
+  const names = new Set(files.map(f => f.name));
 
-    // Helpers
-    const has = (n) => names.has(n);
+  const has = (n) => names.has(n);
 
-    // 1) Collect keys by type
-    const coupleNums = new Set();
-    const doubleNums = new Set();
-    const daysNums   = new Set();
+  const coupleNums = new Set();
+  const doubleNums = new Set();
+  const daysNums   = new Set();
 
-    // prefix map for normal (anime/silly/...)
-    // key: `${prefix}_${nnn}` -> { hasMp4, hasWebp, hasPreview }
-    const normal = new Map();
+  // key: `${prefix}_${nnn}` -> { prefix,num, hasMp4,hasWebp,hasPreview }
+  const normal = new Map();
 
-    for (const name of names) {
-      // skip json itself if any
-      if (name.endsWith(".json")) continue;
+  for (const name of names) {
+    if (name.endsWith(".json")) continue;
 
-      // couple
-      let m = name.match(/^couple_(\d{1,})\.webp$/);
-      if (m) { coupleNums.add(parseInt(m[1],10)); continue; }
+    // couple
+    let m = name.match(/^couple_(\d{1,})\.webp$/);
+    if (m) { coupleNums.add(parseInt(m[1],10)); continue; }
 
-      // double
-      m = name.match(/^double_(\d{1,})_(0|1)\.webp$/);
-      if (m) { doubleNums.add(parseInt(m[1],10)); continue; }
+    // double
+    m = name.match(/^double_(\d{1,})_(0|1)\.webp$/);
+    if (m) { doubleNums.add(parseInt(m[1],10)); continue; }
 
-      // days
-      m = name.match(/^days_(\d{1,})_(6h|12h|18h|24h)\.webp$/);
-      if (m) { daysNums.add(parseInt(m[1],10)); continue; }
+    // days
+    m = name.match(/^days_(\d{1,})_(6h|12h|18h|24h)\.webp$/);
+    if (m) { daysNums.add(parseInt(m[1],10)); continue; }
 
-      // normal mp4/webp
-      // ex: anime_003.mp4 , anime_003.webp
-      m = name.match(/^([a-zA-Z]+)_(\d{1,})\.(mp4|webp)$/);
-      if (m) {
-        const prefix = m[1];
-        const num = pad3(parseInt(m[2],10));
-        const ext = m[3];
-        const key = `${prefix}_${num}`;
-        const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
-        if (ext === "mp4") obj.hasMp4 = true;
-        if (ext === "webp") obj.hasWebp = true;
-        // preview check later
-        normal.set(key, obj);
-        continue;
-      }
-
-      // normal preview
-      m = name.match(/^([a-zA-Z]+)_(\d{1,})_preview\.webp$/);
-      if (m) {
-        const prefix = m[1];
-        const num = pad3(parseInt(m[2],10));
-        const key = `${prefix}_${num}`;
-        const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
-        obj.hasPreview = true;
-        normal.set(key, obj);
-        continue;
-      }
+    // normal mp4/webp: anime_003.mp4 / anime_003.webp
+    m = name.match(/^([a-zA-Z]+)_(\d{1,})\.(mp4|webp)$/);
+    if (m) {
+      const prefix = m[1];
+      const num = pad3(parseInt(m[2],10));
+      const ext = m[3];
+      const key = `${prefix}_${num}`; // baseName without extension
+      const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
+      if (ext === "mp4") obj.hasMp4 = true;
+      if (ext === "webp") obj.hasWebp = true;
+      normal.set(key, obj);
+      continue;
     }
 
-    const items = [];
+    // normal preview: anime_003_preview.webp
+    m = name.match(/^([a-zA-Z]+)_(\d{1,})_preview\.webp$/);
+    if (m) {
+      const prefix = m[1];
+      const num = pad3(parseInt(m[2],10));
+      const key = `${prefix}_${num}`;
+      const obj = normal.get(key) || { prefix, num, hasMp4:false, hasWebp:false, hasPreview:false };
+      obj.hasPreview = true;
+      normal.set(key, obj);
+      continue;
+    }
+  }
 
-    // 2) Build couple items
-    [...coupleNums].sort((a,b)=>a-b).forEach(n => {
-      const num = pad3(n);
-      const webpName = `couple_${num}.webp`;
-      const previewName = `couple_${num}_preview.webp`;
-      const medias = [{
+  const items = [];
+
+  // COUPLE
+  [...coupleNums].sort((a,b)=>a-b).forEach(n => {
+    const num = pad3(n);
+    const webpName = `couple_${num}.webp`;
+    const previewName = `couple_${num}_preview.webp`;
+    items.push({
+      id: `${categoryId}_couple_${num}`,                 // ✅ unique
+      medias: [{
         url: mediaUrl(categoryId, webpName),
         name: webpName,
         thumbUrl: has(previewName) ? mediaUrl(categoryId, previewName) : "",
         contentType: "image/webp"
-      }];
+      }],
+      categoryId,
+      isPremium: true,
+      createdAt: createdAtSec,
+      subType: 0,
+      type: TYPE.COUPLE,
+      coinToUnlock: 0
+    });
+  });
+
+  // DOUBLE
+  [...doubleNums].sort((a,b)=>a-b).forEach(n => {
+    const num = pad3(n);
+    const f0 = `double_${num}_0.webp`;
+    const f1 = `double_${num}_1.webp`;
+    const medias = [];
+    if (has(f0)) medias.push({ url: mediaUrl(categoryId, f0), name: f0, thumbUrl: "", contentType: "image/webp" });
+    if (has(f1)) medias.push({ url: mediaUrl(categoryId, f1), name: f1, thumbUrl: "", contentType: "image/webp" });
+
+    if (medias.length) {
       items.push({
-        id: `${categoryId}_${num}`,
+        id: `${categoryId}_double_${num}`,               // ✅ unique
         medias,
         categoryId,
         isPremium: true,
         createdAt: createdAtSec,
         subType: 0,
-        type: TYPE.COUPLE,
+        type: TYPE.DOUBLE,
         coinToUnlock: 0
       });
-    });
+    }
+  });
 
-    // 3) Build double items (có cái nào add cái đó)
-    [...doubleNums].sort((a,b)=>a-b).forEach(n => {
-      const num = pad3(n);
-      const f0 = `double_${num}_0.webp`;
-      const f1 = `double_${num}_1.webp`;
-
-      const medias = [];
-      if (has(f0)) medias.push({ url: mediaUrl(categoryId, f0), name: f0, thumbUrl: "", contentType: "image/webp" });
-      if (has(f1)) medias.push({ url: mediaUrl(categoryId, f1), name: f1, thumbUrl: "", contentType: "image/webp" });
-
-      // chỉ push nếu thực sự có ít nhất 1 file
-      if (medias.length) {
-        items.push({
-          id: `${categoryId}_${num}`,
-          medias,
-          categoryId,
-          isPremium: true,
-          createdAt: createdAtSec,
-          subType: 0,
-          type: TYPE.DOUBLE,
-          coinToUnlock: 0
-        });
-      }
-    });
-
-    // 4) Build days items (có slot nào add slot đó)
-    const dayOrder = ["6h","12h","18h","24h"];
-    [...daysNums].sort((a,b)=>a-b).forEach(n => {
-      const num = pad3(n);
-      const medias = [];
-      for (const suf of dayOrder) {
-        const fname = `days_${num}_${suf}.webp`;
-        if (has(fname)) {
-          medias.push({
-            url: mediaUrl(categoryId, fname),
-            name: fname,
-            thumbUrl: "",
-            hour: hourFromDaysSuffix(suf),
-            contentType: "image/webp"
-          });
-        }
-      }
-      if (medias.length) {
-        items.push({
-          id: `${categoryId}_${num}`,
-          medias,
-          categoryId,
-          isPremium: true,
-          createdAt: createdAtSec,
-          subType: 0,
-          type: TYPE.DAYS,
-          coinToUnlock: 0
-        });
-      }
-    });
-
-    // 5) Build normal items (LIVE hoặc STILL)
-    // sort by prefix then num
-    const normalsSorted = [...normal.values()].sort((a,b)=>{
-      const p = a.prefix.localeCompare(b.prefix);
-      if (p !== 0) return p;
-      return a.num.localeCompare(b.num);
-    });
-
-    for (const it of normalsSorted) {
-      const prefix = it.prefix;
-      const num = it.num;
-      const baseId = `${categoryId}_${num}`;
-
-      const mp4Name = `${prefix}_${num}.mp4`;
-      const webpName = `${prefix}_${num}.webp`;
-      const previewName = `${prefix}_${num}_preview.webp`;
-
-      // LIVE
-      if (it.hasMp4 && it.hasWebp) {
-        items.push({
-          id: baseId,
-          medias: [
-            {
-              url: mediaUrl(categoryId, mp4Name),
-              name: mp4Name,
-              thumbUrl: "",
-              contentType: "video/mp4"
-            },
-            {
-              url: mediaUrl(categoryId, webpName),
-              name: webpName,
-              thumbUrl: it.hasPreview && has(previewName) ? mediaUrl(categoryId, previewName) : "",
-              contentType: "image/webp"
-            }
-          ],
-          categoryId,
-          isPremium: true,
-          createdAt: createdAtSec,
-          subType: 0,
-          type: TYPE.LIVE,
-          coinToUnlock: 0
-        });
-        continue;
-      }
-
-      // STILL
-      if (it.hasWebp) {
-        items.push({
-          id: baseId,
-          medias: [
-            {
-              url: mediaUrl(categoryId, webpName),
-              name: webpName,
-              thumbUrl: it.hasPreview && has(previewName) ? mediaUrl(categoryId, previewName) : "",
-              contentType: "image/webp"
-            }
-          ],
-          categoryId,
-          isPremium: true,
-          createdAt: createdAtSec,
-          subType: 0,
-          type: TYPE.STILL,
-          coinToUnlock: 0
+  // DAYS
+  const dayOrder = ["6h","12h","18h","24h"];
+  [...daysNums].sort((a,b)=>a-b).forEach(n => {
+    const num = pad3(n);
+    const medias = [];
+    for (const suf of dayOrder) {
+      const fname = `days_${num}_${suf}.webp`;
+      if (has(fname)) {
+        medias.push({
+          url: mediaUrl(categoryId, fname),
+          name: fname,
+          thumbUrl: "",
+          hour: hourFromDaysSuffix(suf),
+          contentType: "image/webp"
         });
       }
     }
+    if (medias.length) {
+      items.push({
+        id: `${categoryId}_days_${num}`,                 // ✅ unique
+        medias,
+        categoryId,
+        isPremium: true,
+        createdAt: createdAtSec,
+        subType: 0,
+        type: TYPE.DAYS,
+        coinToUnlock: 0
+      });
+    }
+  });
 
-    // Lưu ý: không dedupe – folder nào có gì thì items có hết.
-    return items;
+  // NORMAL (LIVE / STILL)
+  const normalsSorted = [...normal.entries()].sort((a,b)=>{
+    // sort by baseName
+    return a[0].localeCompare(b[0]);
+  });
+
+  for (const [baseName, it] of normalsSorted) {
+    const prefix = it.prefix;
+    const num = it.num;
+
+    const mp4Name = `${prefix}_${num}.mp4`;
+    const webpName = `${prefix}_${num}.webp`;
+    const previewName = `${prefix}_${num}_preview.webp`;
+
+    // ✅ ID includes baseName (anime_003 / silly_031 ...)
+    const id = `${categoryId}_${baseName}`;
+
+    // LIVE
+    if (it.hasMp4 && it.hasWebp) {
+      items.push({
+        id,
+        medias: [
+          { url: mediaUrl(categoryId, mp4Name), name: mp4Name, thumbUrl: "", contentType: "video/mp4" },
+          {
+            url: mediaUrl(categoryId, webpName),
+            name: webpName,
+            thumbUrl: (it.hasPreview && has(previewName)) ? mediaUrl(categoryId, previewName) : "",
+            contentType: "image/webp"
+          }
+        ],
+        categoryId,
+        isPremium: true,
+        createdAt: createdAtSec,
+        subType: 0,
+        type: TYPE.LIVE,
+        coinToUnlock: 0
+      });
+      continue;
+    }
+
+    // STILL
+    if (it.hasWebp) {
+      items.push({
+        id,
+        medias: [
+          {
+            url: mediaUrl(categoryId, webpName),
+            name: webpName,
+            thumbUrl: (it.hasPreview && has(previewName)) ? mediaUrl(categoryId, previewName) : "",
+            contentType: "image/webp"
+          }
+        ],
+        categoryId,
+        isPremium: true,
+        createdAt: createdAtSec,
+        subType: 0,
+        type: TYPE.STILL,
+        coinToUnlock: 0
+      });
+    }
   }
+
+  return items;
+}
+
 
   async function listFolderFiles(folderName) {
     const path = `${ROOT_DIR}/${folderName}`;
@@ -755,6 +741,16 @@
         // không dedupe
         allItems = allItems.concat(items);
       }
+
+      // đảm bảo unique id toàn cục (fallback)
+const seen = new Map();
+for (const it of allItems) {
+  if (!seen.has(it.id)) { seen.set(it.id, 1); continue; }
+  const c = seen.get(it.id) + 1;
+  seen.set(it.id, c);
+  it.id = `${it.id}__${c}`; // suffix nếu vẫn trùng
+}
+
 
       const jsonText = JSON.stringify(allItems, null, 2);
 
