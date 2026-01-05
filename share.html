@@ -64,7 +64,15 @@
     } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js";
 
     // TODO: Replace with your config from Firebase Console
-    const firebaseConfig = YOUR_FIREBASE_CONFIG_HERE;
+const firebaseConfig = {
+  apiKey: "AIzaSyAxcvvViuDHPLfobaSNEeGd5fightpHmkU",
+  authDomain: "mockproject-8edd5.firebaseapp.com",
+  projectId: "mockproject-8edd5",
+  storageBucket: "mockproject-8edd5.firebasestorage.app",
+  messagingSenderId: "876540044147",
+  appId: "1:876540044147:web:5cd41c75573eca2d419b06",
+  measurementId: "G-R7KMC0YHK8"
+};
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
