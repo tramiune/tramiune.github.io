@@ -86,7 +86,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Auto load orders.json (GitHub API) · Item mới chưa có trong order sẽ lên đầu</span>
+    <span class="mut">Auto load từ dev/wallpaper.json · Item mới chưa có trong JSON sẽ lên đầu</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -96,11 +96,10 @@
         remember token
     </label>
 
-    <button id="saveLocal">Save orders (local)</button>
-    <button id="reloadAuto">Reload orders (auto)</button>
-    <button id="uploadOrders">Upload dev/orders.json</button>
+    <button id="saveLocal">Save local</button>
+    <button id="reloadAuto">Reload (auto)</button>
+    <button id="uploadWallpaper">Upload dev/wallpaper.json</button>
 
-    <button id="genAll">Generate JSON (ALL like browser)</button>
     <span class="mut" id="rate"></span>
 
     <a class="btn" href="./browser.html" target="_blank" rel="noreferrer">🧭 Browser</a>
@@ -139,8 +138,7 @@
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
-    const OUTPUT_ALL_JSON = "dev/wallpaper.json";
-    const ORDERS_PATH = "dev/orders.json";
+    const WALLPAPER_JSON_PATH = "dev/wallpaper.json";
 
     const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
     const VIDEO_EXT = ["mp4","webm","mov"];
@@ -164,10 +162,13 @@
     let activeFolder = null;
     let folderCache = new Map(); // folderName -> { files:[name], items:[item] }
 
+    // State cho UI ordering + toggle, được dựng từ wallpaper.json hoặc local
     let ordersState = {
       version: 1,
       updatedAt: 0,
-      categories: {}
+      categories: {
+        // [categoryId]: { order:[ids], liveUsePreview:{[id]:bool}, coupleUsePreview:{[id]:bool} }
+      }
     };
 
     /** ========= utils ========= */
@@ -202,7 +203,6 @@
     }
 
     function hasToken(){ return !!elToken.value.trim(); }
-
     function getAuthToken(){
       const t = elToken.value.trim();
       if (!t) throw new Error("Bạn chưa nhập GitHub token (write).");
@@ -235,7 +235,6 @@
     (function initToken(){
       const saved = localStorage.getItem(LS_TOKEN_ORDERS) || localStorage.getItem(LS_TOKEN_BROWSER);
       if (saved) { elToken.value = saved; elRememberToken.checked = true; }
-
       elRememberToken.addEventListener("change", () => {
         if (elRememberToken.checked) {
           if (elToken.value.trim()) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
@@ -243,7 +242,6 @@
           localStorage.removeItem(LS_TOKEN_ORDERS);
         }
       });
-
       elToken.addEventListener("input", () => {
         if (elRememberToken.checked) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
       });
@@ -261,7 +259,6 @@
       try { return JSON.parse(raw); } catch { return null; }
     }
 
-    /** ========= normalize/migrate orders ========= */
     function normalizeOrdersState(st){
       if (!st || typeof st !== "object") return null;
       st.version ||= 1;
@@ -275,48 +272,77 @@
       return st;
     }
 
-    /** ========= load orders (NO CDN) ========= */
-    async function loadOrdersFromGitHub(){
-      // fresh nhất, nhưng cần token để call ổn định + tránh limit (private repo bắt buộc)
-      const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
+    /** ========= Build ordersState FROM wallpaper.json ========= */
+    function hydrateOrdersFromWallpaper(items){
+      const next = normalizeOrdersState({ version:1, updatedAt: Math.floor(Date.now()/1000), categories:{} });
+
+      // group by categoryId in order of appearance
+      for (const it of items || []) {
+        const cat = it.categoryId;
+        if (!cat) continue;
+
+        if (!next.categories[cat]) next.categories[cat] = { order: [], liveUsePreview:{}, coupleUsePreview:{} };
+        const st = next.categories[cat];
+
+        if (it.id) st.order.push(it.id);
+
+        // derive preview toggle from thumbUrl (if any)
+        const medias = Array.isArray(it.medias) ? it.medias : [];
+        if (it.type === TYPE.LIVE) {
+          const imgMedia = medias.find(m => (m.contentType||"").startsWith("image/"));
+          if (imgMedia) st.liveUsePreview[it.id] = !!(imgMedia.thumbUrl && String(imgMedia.thumbUrl).trim());
+        }
+        if (it.type === TYPE.COUPLE) {
+          const imgMedia = medias.find(m => (m.contentType||"").startsWith("image/"));
+          if (imgMedia) st.coupleUsePreview[it.id] = !!(imgMedia.thumbUrl && String(imgMedia.thumbUrl).trim());
+        }
+      }
+      return next;
+    }
+
+    async function loadWallpaperJsonFromGitHub(){
+      // cần token để chắc chắn fresh / tránh limit (private repo bắt buộc)
+      const meta = await fetchJson(ghContentsUrl(WALLPAPER_JSON_PATH), true);
       const b64 = (meta.content || "").replace(/\n/g, "");
       const txt = decodeURIComponent(escape(atob(b64)));
       return JSON.parse(txt);
     }
 
-    async function loadOrdersAuto(){
-      setStatus("Loading orders... (GitHub API -> local)");
+    /**
+     * AUTO LOAD:
+     * - Nếu có token: load dev/wallpaper.json -> hydrate ordersState
+     * - Nếu fail / không token: fallback localStorage
+     */
+    async function loadStateAuto(){
+      setStatus(`Loading state from ${WALLPAPER_JSON_PATH} ...`);
 
       const local = normalizeOrdersState(loadOrdersLocal());
-      let remote = null;
-
       if (hasToken()) {
         try {
-          remote = normalizeOrdersState(await loadOrdersFromGitHub());
+          const items = await loadWallpaperJsonFromGitHub();
+          const hydrated = hydrateOrdersFromWallpaper(items);
+
+          // nếu local mới hơn remote (có thể user vừa kéo nhưng chưa upload) -> giữ local
+          const lt = local?.updatedAt || 0;
+          const rt = hydrated?.updatedAt || 0;
+
+          ordersState = (local && lt > rt) ? local : hydrated;
+          saveOrdersLocal();
+          setStatus(`✅ Loaded from wallpaper.json (and cached local).`);
+          return true;
         } catch (e) {
-          console.warn("Load orders from GitHub failed:", e);
-          remote = null;
+          console.warn("load wallpaper.json failed:", e);
         }
-      }
-
-      const lt = local?.updatedAt || 0;
-      const rt = remote?.updatedAt || 0;
-
-      if (remote && rt >= lt) {
-        ordersState = remote;
-        saveOrdersLocal();
-        setStatus(`✅ Using REMOTE orders (updatedAt=${rt})`);
-        return true;
       }
 
       if (local) {
         ordersState = local;
-        setStatus(`✅ Using LOCAL orders (updatedAt=${lt})`);
+        setStatus("✅ Loaded from localStorage (fallback).");
         return true;
       }
 
       ordersState = normalizeOrdersState({ version:1, updatedAt:0, categories:{} });
-      setStatus("⚠️ No orders found. Using empty state.");
+      setStatus("⚠️ Không load được wallpaper.json (cần token?) và local cũng chưa có.");
       return false;
     }
 
@@ -357,9 +383,9 @@
       if (!ordersState.categories[catId]) {
         ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {} };
       } else {
+        ordersState.categories[catId].order ||= [];
         ordersState.categories[catId].liveUsePreview ||= {};
         ordersState.categories[catId].coupleUsePreview ||= {};
-        ordersState.categories[catId].order ||= [];
       }
       return ordersState.categories[catId];
     }
@@ -370,7 +396,12 @@
       st.order = ids;
     }
 
-    // item mới (chưa có trong order) -> lên đầu
+    /**
+     * APPLY ORDER:
+     * - item mới (id chưa có trong order) => đưa lên ĐẦU
+     * - id cũ giữ thứ tự
+     * - đồng thời cập nhật st.order luôn để persist
+     */
     function applyOrder(catId, items){
       const st = ensureCategoryState(catId);
 
@@ -390,14 +421,11 @@
       }
 
       const out = [...newlyAdded, ...kept];
-
-      // persist merged order
       st.order = out.map(x => x.id);
-
       return out;
     }
 
-    /** ========= Build items from folder files ========= */
+    /** ========= Build items from folder files (same logic) ========= */
     function buildItemsFromFiles(folderName, fileNames) {
       const categoryId = folderName;
       const previewByBaseImage = new Map(); // baseImage -> previewFile
@@ -413,7 +441,6 @@
       const doubleByNum = new Map();
       const daysByNum = new Map();
       const coupleByNum = new Map();
-
       const mp4ByKey = new Map();
       const imgByKey = new Map();
 
@@ -936,9 +963,9 @@
         folderCache.set(folderName, { files, items });
       }
 
-      // apply saved LIVE/COUPLE preview choice
       const st = ensureCategoryState(folderName);
 
+      // apply toggles into medias thumbUrl + thumb UI
       for (const it of items) {
         if (it.type === TYPE.LIVE) {
           const use = (st.liveUsePreview[it.id] ?? true);
@@ -961,17 +988,7 @@
       renderItems(folderName, ordered);
     }
 
-    /** ========= upload orders.json ========= */
-    async function uploadOrdersJson(){
-      saveOrdersLocal(); // bump updatedAt
-      setStatus(`Uploading ${ORDERS_PATH} ...`);
-      const txt = JSON.stringify(ordersState, null, 2);
-      await upsertTextFile(ORDERS_PATH, txt, `Update orders (${ordersState.updatedAt})`);
-      setStatus(`✅ Uploaded ${ORDERS_PATH} (updatedAt=${ordersState.updatedAt})`);
-      alert("Upload orders.json xong ✅");
-    }
-
-    /** ========= Generate JSON ALL (like browser) ========= */
+    /** ========= Upload dev/wallpaper.json (build ALL then upsert) ========= */
     function uniqId(desired, used){
       if (!used.has(desired)) { used.add(desired); return desired; }
       let i=2;
@@ -981,15 +998,16 @@
       return out;
     }
 
-    async function generateAllLikeBrowser(){
-      const ok = confirm(
-        `Generate JSON ALL (like browser) + upload?\n\nOutput: ${OUTPUT_ALL_JSON}\n\n⚠️ overwrite file cũ`
-      );
+    async function uploadWallpaperJson(){
+      if (!hasToken()) throw new Error("Cần token để upload dev/wallpaper.json");
+
+      const ok = confirm(`Upload đè ${WALLPAPER_JSON_PATH} theo thứ tự/toggle hiện tại?`);
       if (!ok) return;
 
-      setStatus("Generating ALL...");
+      setStatus("Building ALL from resources + current order/toggles...");
 
       if (activeFolder) syncOrderFromDOM(activeFolder);
+
       const used = new Set();
       const out = [];
       let createdAt = Math.floor(Date.now()/1000);
@@ -1045,26 +1063,31 @@
       saveOrdersLocal();
 
       const jsonText = JSON.stringify(out, null, 2);
+      setStatus(`Uploading ${WALLPAPER_JSON_PATH} ... items=${out.length}`);
 
-      setStatus(`Uploading ${OUTPUT_ALL_JSON} ...\nItems: ${out.length}`);
-      await upsertTextFile(OUTPUT_ALL_JSON, jsonText, `Generate wallpaper.json (${out.length})`);
-      setStatus(`✅ Done\nUploaded: ${OUTPUT_ALL_JSON}\nItems: ${out.length}`);
-      alert("Generate JSON xong ✅");
+      await upsertTextFile(
+        WALLPAPER_JSON_PATH,
+        jsonText,
+        `Update wallpaper.json (${out.length})`
+      );
+
+      setStatus(`✅ Uploaded ${WALLPAPER_JSON_PATH} (items=${out.length})`);
+      alert("Upload wallpaper.json xong ✅");
     }
 
     /** ========= events ========= */
-    document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved orders local ✅"); };
+    document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved local ✅"); };
 
     document.getElementById("reloadAuto").onclick = () => {
       (async () => {
-        await loadOrdersAuto();
+        await loadStateAuto();
         if (activeFolder && folderCache.has(activeFolder)) {
           const items = folderCache.get(activeFolder).items;
           const ordered = applyOrder(activeFolder, items);
           saveOrdersLocal();
           renderItems(activeFolder, ordered);
         }
-        alert("Reload orders (auto) ✅");
+        alert("Reload (auto) ✅");
       })().catch(err => {
         console.error(err);
         alert(String(err?.message || err));
@@ -1072,16 +1095,8 @@
       });
     };
 
-    document.getElementById("uploadOrders").onclick = () => {
-      uploadOrdersJson().catch(err => {
-        console.error(err);
-        alert(String(err?.message || err));
-        setStatus(String(err?.message || err));
-      });
-    };
-
-    document.getElementById("genAll").onclick = () => {
-      generateAllLikeBrowser().catch(err => {
+    document.getElementById("uploadWallpaper").onclick = () => {
+      uploadWallpaperJson().catch(err => {
         console.error(err);
         alert(String(err?.message || err));
         setStatus(String(err?.message || err));
@@ -1100,8 +1115,7 @@
 
     /** boot */
     (async function boot(){
-      // token init chạy sync trước rồi, nên có thể auto-load orders remote nếu token đã lưu
-      await loadOrdersAuto();
+      await loadStateAuto();   // hydrate từ wallpaper.json (nếu có token), fallback local
       await loadFolders();
     })().catch(err => setStatus(String(err?.message || err)));
 </script>
