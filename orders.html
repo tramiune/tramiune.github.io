@@ -23,6 +23,7 @@
         button:hover, a.btn:hover { background:#f5f5f5; }
         label.mut { display:inline-flex; gap:6px; align-items:center; }
         input[type="checkbox"] { transform: translateY(1px); }
+        .danger { border-color:#f0c1c1 !important; }
 
         .wrap { display:grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 64px); }
         aside { border-right:1px solid var(--bd); padding:10px; overflow:auto; }
@@ -48,7 +49,7 @@
           width:120px; aspect-ratio: 9/16; background:#f2f2f2; display:flex; align-items:center; justify-content:center;
           overflow:hidden;
         }
-        .thumb img { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
+        .thumb img, .thumb video { width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; user-select:none; }
         .meta { padding:10px 10px 10px 0; }
         .name { font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .pill { font-size:11px; color:#333; background:#f3f3f3; border:1px solid #e2e2e2; padding:2px 8px; border-radius:999px; display:inline-block; margin-top:6px; }
@@ -86,7 +87,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Auto load từ dev/wallpaper.json · Item mới chưa có trong JSON sẽ lên đầu</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -96,10 +97,11 @@
         remember token
     </label>
 
-    <button id="saveLocal">Save local</button>
-    <button id="reloadAuto">Reload (auto)</button>
-    <button id="uploadWallpaper">Upload dev/wallpaper.json</button>
+    <button id="saveLocal">Save orders (local)</button>
+    <button id="loadLocal">Load orders (local)</button>
+    <button id="uploadOrders">Upload dev/orders.json</button>
 
+    <button id="genAll">Generate JSON (ALL like browser)</button>
     <span class="mut" id="rate"></span>
 
     <a class="btn" href="./browser.html" target="_blank" rel="noreferrer">🧭 Browser</a>
@@ -138,7 +140,8 @@
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
-    const WALLPAPER_JSON_PATH = "dev/wallpaper.json";
+    const OUTPUT_ALL_JSON = "dev/wallpaper.json";
+    const ORDERS_PATH = "dev/orders.json";
 
     const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
     const VIDEO_EXT = ["mp4","webm","mov"];
@@ -160,14 +163,13 @@
 
     let allFolders = [];
     let activeFolder = null;
-    let folderCache = new Map(); // folderName -> { files:[name], items:[item] }
+    let folderCache = new Map();  // folderName -> { files:[name], items:[item] }
 
-    // State cho UI ordering + toggle, được dựng từ wallpaper.json hoặc local
     let ordersState = {
       version: 1,
       updatedAt: 0,
       categories: {
-        // [categoryId]: { order:[ids], liveUsePreview:{[id]:bool}, coupleUsePreview:{[id]:bool} }
+        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{} }
       }
     };
 
@@ -177,6 +179,7 @@
     function pad3(n){ return String(n).padStart(3,"0"); }
     function encodePath(path){ return path.split("/").map(encodeURIComponent).join("/"); }
     function cdnUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
+    function folderDefaultPrefix(folderName){ return folderName.replace(/^\d+_/, ""); }
     function isPreviewName(name){ return name.includes("_preview."); }
     function contentTypeFromExt(name){
       const e=extOf(name);
@@ -202,34 +205,31 @@
       return String(t);
     }
 
-    function hasToken(){ return !!elToken.value.trim(); }
     function getAuthToken(){
       const t = elToken.value.trim();
       if (!t) throw new Error("Bạn chưa nhập GitHub token (write).");
       return t;
     }
-
     async function fetchJson(url, withAuth=false){
       const headers = { "Accept":"application/vnd.github+json" };
       if (withAuth) headers["Authorization"] = `Bearer ${getAuthToken()}`;
       const res = await fetch(url, { headers });
-
       const limit = res.headers.get("x-ratelimit-limit");
       const remain = res.headers.get("x-ratelimit-remaining");
       if (limit && remain) elRate.textContent = `GitHub API rate: ${remain}/${limit}`;
-
       if (!res.ok) {
         const txt = await res.text().catch(()=> "");
         throw new Error(`HTTP ${res.status}\n${txt}`);
       }
       return res.json();
     }
-
     function ghContentsUrl(path){
       return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(BRANCH)}`;
     }
 
-    /** ========= token localStorage ========= */
+    /** ========= token localStorage =========
+     *  để tiện: ưu tiên key orders, fallback key browser
+     */
     const LS_TOKEN_ORDERS = `orders_token_${OWNER}_${REPO}`;
     const LS_TOKEN_BROWSER = `wallpaper_browser_token_${OWNER}_${REPO}`;
     (function initToken(){
@@ -257,93 +257,6 @@
       const raw = localStorage.getItem(LS_ORDERS);
       if (!raw) return null;
       try { return JSON.parse(raw); } catch { return null; }
-    }
-
-    function normalizeOrdersState(st){
-      if (!st || typeof st !== "object") return null;
-      st.version ||= 1;
-      st.updatedAt ||= 0;
-      st.categories ||= {};
-      for (const k of Object.keys(st.categories)) {
-        st.categories[k].order ||= [];
-        st.categories[k].liveUsePreview ||= {};
-        st.categories[k].coupleUsePreview ||= {};
-      }
-      return st;
-    }
-
-    /** ========= Build ordersState FROM wallpaper.json ========= */
-    function hydrateOrdersFromWallpaper(items){
-      const next = normalizeOrdersState({ version:1, updatedAt: Math.floor(Date.now()/1000), categories:{} });
-
-      // group by categoryId in order of appearance
-      for (const it of items || []) {
-        const cat = it.categoryId;
-        if (!cat) continue;
-
-        if (!next.categories[cat]) next.categories[cat] = { order: [], liveUsePreview:{}, coupleUsePreview:{} };
-        const st = next.categories[cat];
-
-        if (it.id) st.order.push(it.id);
-
-        // derive preview toggle from thumbUrl (if any)
-        const medias = Array.isArray(it.medias) ? it.medias : [];
-        if (it.type === TYPE.LIVE) {
-          const imgMedia = medias.find(m => (m.contentType||"").startsWith("image/"));
-          if (imgMedia) st.liveUsePreview[it.id] = !!(imgMedia.thumbUrl && String(imgMedia.thumbUrl).trim());
-        }
-        if (it.type === TYPE.COUPLE) {
-          const imgMedia = medias.find(m => (m.contentType||"").startsWith("image/"));
-          if (imgMedia) st.coupleUsePreview[it.id] = !!(imgMedia.thumbUrl && String(imgMedia.thumbUrl).trim());
-        }
-      }
-      return next;
-    }
-
-    async function loadWallpaperJsonFromGitHub(){
-      // cần token để chắc chắn fresh / tránh limit (private repo bắt buộc)
-      const meta = await fetchJson(ghContentsUrl(WALLPAPER_JSON_PATH), true);
-      const b64 = (meta.content || "").replace(/\n/g, "");
-      const txt = decodeURIComponent(escape(atob(b64)));
-      return JSON.parse(txt);
-    }
-
-    /**
-     * AUTO LOAD:
-     * - Nếu có token: load dev/wallpaper.json -> hydrate ordersState
-     * - Nếu fail / không token: fallback localStorage
-     */
-    async function loadStateAuto(){
-      setStatus(`Loading state from ${WALLPAPER_JSON_PATH} ...`);
-
-      const local = normalizeOrdersState(loadOrdersLocal());
-      if (hasToken()) {
-        try {
-          const items = await loadWallpaperJsonFromGitHub();
-          const hydrated = hydrateOrdersFromWallpaper(items);
-
-          // nếu local mới hơn remote (có thể user vừa kéo nhưng chưa upload) -> giữ local
-          const lt = local?.updatedAt || 0;
-          const rt = hydrated?.updatedAt || 0;
-
-          ordersState = (local && lt > rt) ? local : hydrated;
-          saveOrdersLocal();
-          setStatus(`✅ Loaded from wallpaper.json (and cached local).`);
-          return true;
-        } catch (e) {
-          console.warn("load wallpaper.json failed:", e);
-        }
-      }
-
-      if (local) {
-        ordersState = local;
-        setStatus("✅ Loaded from localStorage (fallback).");
-        return true;
-      }
-
-      ordersState = normalizeOrdersState({ version:1, updatedAt:0, categories:{} });
-      setStatus("⚠️ Không load được wallpaper.json (cần token?) và local cũng chưa có.");
-      return false;
     }
 
     /** ========= Git upsert text file ========= */
@@ -383,49 +296,32 @@
       if (!ordersState.categories[catId]) {
         ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {} };
       } else {
-        ordersState.categories[catId].order ||= [];
+        // migrate nếu file cũ chưa có
         ordersState.categories[catId].liveUsePreview ||= {};
         ordersState.categories[catId].coupleUsePreview ||= {};
+        ordersState.categories[catId].order ||= [];
       }
       return ordersState.categories[catId];
     }
-
     function syncOrderFromDOM(catId){
       const st = ensureCategoryState(catId);
       const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
       st.order = ids;
     }
-
-    /**
-     * APPLY ORDER:
-     * - item mới (id chưa có trong order) => đưa lên ĐẦU
-     * - id cũ giữ thứ tự
-     * - đồng thời cập nhật st.order luôn để persist
-     */
     function applyOrder(catId, items){
       const st = ensureCategoryState(catId);
-
       const byId = new Map(items.map(it => [it.id, it]));
-      const oldOrder = Array.isArray(st.order) ? st.order : [];
-      const kept = [];
-      const used = new Set();
+      const out = [];
 
-      for (const id of oldOrder) {
+      for (const id of st.order) {
         const it = byId.get(id);
-        if (it) { kept.push(it); used.add(id); }
+        if (it) { out.push(it); byId.delete(id); }
       }
-
-      const newlyAdded = [];
-      for (const it of items) {
-        if (!used.has(it.id)) newlyAdded.push(it);
-      }
-
-      const out = [...newlyAdded, ...kept];
-      st.order = out.map(x => x.id);
+      for (const it of byId.values()) out.push(it);
       return out;
     }
 
-    /** ========= Build items from folder files (same logic) ========= */
+    /** ========= Build items from folder files ========= */
     function buildItemsFromFiles(folderName, fileNames) {
       const categoryId = folderName;
       const previewByBaseImage = new Map(); // baseImage -> previewFile
@@ -438,11 +334,12 @@
         }
       }
 
-      const doubleByNum = new Map();
-      const daysByNum = new Map();
-      const coupleByNum = new Map();
-      const mp4ByKey = new Map();
-      const imgByKey = new Map();
+      const doubleByNum = new Map(); // num -> {0,1}
+      const daysByNum = new Map();   // num -> Map(hour -> file)
+      const coupleByNum = new Map(); // num -> {single,0,1,preview}
+
+      const mp4ByKey = new Map();    // prefix|num -> file
+      const imgByKey = new Map();    // prefix|num -> file
 
       for (const name of fileNames) {
         if (isPreviewName(name)) {
@@ -576,7 +473,11 @@
         let couplePreviewUrl = "";
 
         if (obj.single) {
-          const previewFile = obj.preview || previewByBaseImage.get(obj.single) || null;
+          const previewFile =
+            obj.preview
+            || previewByBaseImage.get(obj.single)
+            || null;
+
           couplePreviewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
 
           medias.push({
@@ -663,7 +564,7 @@
         }
       }
 
-      // chống trùng id trong 1 folder
+      // fallback chống trùng id trong 1 folder (UI ổn định)
       const seen = new Map();
       for (const it of items) {
         const c = (seen.get(it.id) || 0) + 1;
@@ -735,7 +636,7 @@
         openBtn.rel = "noreferrer";
         actions.appendChild(openBtn);
 
-        // LIVE preview toggle
+        // ===== LIVE preview toggle =====
         if (it.type === TYPE.LIVE) {
           const hasPreview = !!it._hasPreview;
           const defaultChecked = hasPreview ? (st.liveUsePreview[it.id] ?? true) : false;
@@ -754,11 +655,11 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
 
+            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
             }
-            saveOrdersLocal();
           };
 
           lb.appendChild(cb);
@@ -773,7 +674,7 @@
           }
         }
 
-        // COUPLE preview toggle
+        // ===== COUPLE preview toggle (NEW) =====
         if (it.type === TYPE.COUPLE) {
           const hasPreview = !!it._hasPreview;
           const defaultChecked = hasPreview ? (st.coupleUsePreview[it.id] ?? true) : false;
@@ -792,11 +693,11 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._couplePreviewUrl || "") : "";
 
+            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
             }
-            saveOrdersLocal();
           };
 
           lb.appendChild(cb);
@@ -838,8 +739,6 @@
         document.removeEventListener("pointermove", onMove, {passive:false});
         document.removeEventListener("pointerup", onUp, {passive:false});
         syncOrderFromDOM(catId);
-        saveOrdersLocal();
-        setStatus(`Saved local: ${catId} (updatedAt=${ordersState.updatedAt})`);
       }
 
       function createGhostFrom(el){
@@ -849,6 +748,7 @@
         g.style.left = r.left + r.width/2 + "px";
         g.style.top  = r.top + r.height/2 + "px";
         g.style.width = r.width + "px";
+        g.querySelectorAll("video").forEach(v => { try { v.pause(); } catch{} });
         document.body.appendChild(g);
         return g;
       }
@@ -927,9 +827,8 @@
 
     /** ========= loaders ========= */
     async function loadFolders() {
-      setStatus("Loading folders... (GitHub Contents API)");
-      const data = await fetchJson(ghContentsUrl(ROOT_DIR), hasToken());
-
+      setStatus("Loading folders... (requires token)");
+      const data = await fetchJson(ghContentsUrl(ROOT_DIR), true);
       allFolders = data
         .filter(x => x.type === "dir")
         .map(x => ({ name: x.name, path: x.path }))
@@ -942,7 +841,7 @@
 
     async function listFolderFiles(folderName){
       const path = `${ROOT_DIR}/${folderName}`;
-      const data = await fetchJson(ghContentsUrl(path), hasToken());
+      const data = await fetchJson(ghContentsUrl(path), true);
       return data.filter(x => x.type === "file").map(x => x.name);
     }
 
@@ -963,9 +862,9 @@
         folderCache.set(folderName, { files, items });
       }
 
+      // apply saved LIVE/COUPLE preview choice
       const st = ensureCategoryState(folderName);
 
-      // apply toggles into medias thumbUrl + thumb UI
       for (const it of items) {
         if (it.type === TYPE.LIVE) {
           const use = (st.liveUsePreview[it.id] ?? true);
@@ -982,13 +881,21 @@
       }
 
       const ordered = applyOrder(folderName, items);
-      saveOrdersLocal();
-
       setStatus(`Loaded ${items.length} items.`);
       renderItems(folderName, ordered);
     }
 
-    /** ========= Upload dev/wallpaper.json (build ALL then upsert) ========= */
+    /** ========= orders.json upload ========= */
+    async function uploadOrdersJson(){
+      saveOrdersLocal();
+      setStatus(`Uploading ${ORDERS_PATH} ...`);
+      const txt = JSON.stringify(ordersState, null, 2);
+      await upsertTextFile(ORDERS_PATH, txt, `Update orders (${ordersState.updatedAt})`);
+      setStatus(`✅ Uploaded ${ORDERS_PATH}`);
+      alert("Upload orders.json xong ✅");
+    }
+
+    /** ========= Generate JSON ALL (like browser) ========= */
     function uniqId(desired, used){
       if (!used.has(desired)) { used.add(desired); return desired; }
       let i=2;
@@ -998,16 +905,15 @@
       return out;
     }
 
-    async function uploadWallpaperJson(){
-      if (!hasToken()) throw new Error("Cần token để upload dev/wallpaper.json");
-
-      const ok = confirm(`Upload đè ${WALLPAPER_JSON_PATH} theo thứ tự/toggle hiện tại?`);
+    async function generateAllLikeBrowser(){
+      const ok = confirm(
+        `Generate JSON ALL (like browser) + upload?\n\nOutput: ${OUTPUT_ALL_JSON}\n\n⚠️ overwrite file cũ`
+      );
       if (!ok) return;
 
-      setStatus("Building ALL from resources + current order/toggles...");
+      setStatus("Generating ALL...");
 
       if (activeFolder) syncOrderFromDOM(activeFolder);
-
       const used = new Set();
       const out = [];
       let createdAt = Math.floor(Date.now()/1000);
@@ -1047,7 +953,8 @@
 
         for (const it of ordered) {
           const id = uniqId(it.id, used);
-          out.push({
+
+          const exportItem = {
             id,
             medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
@@ -1056,47 +963,42 @@
             subType: 0,
             type: it.type,
             coinToUnlock: 0
-          });
+          };
+          out.push(exportItem);
         }
       }
 
-      saveOrdersLocal();
-
       const jsonText = JSON.stringify(out, null, 2);
-      setStatus(`Uploading ${WALLPAPER_JSON_PATH} ... items=${out.length}`);
 
-      await upsertTextFile(
-        WALLPAPER_JSON_PATH,
-        jsonText,
-        `Update wallpaper.json (${out.length})`
-      );
-
-      setStatus(`✅ Uploaded ${WALLPAPER_JSON_PATH} (items=${out.length})`);
-      alert("Upload wallpaper.json xong ✅");
+      setStatus(`Uploading ${OUTPUT_ALL_JSON} ...\nItems: ${out.length}`);
+      await upsertTextFile(OUTPUT_ALL_JSON, jsonText, `Generate wallpaper.json (${out.length})`);
+      setStatus(`✅ Done\nUploaded: ${OUTPUT_ALL_JSON}\nItems: ${out.length}`);
+      alert("Generate JSON xong ✅");
     }
 
     /** ========= events ========= */
-    document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved local ✅"); };
+    document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved orders local ✅"); };
+    document.getElementById("loadLocal").onclick = () => {
+      const st = loadOrdersLocal();
+      if (!st) return alert("Chưa có orders trong localStorage");
+      ordersState = st;
+      alert("Loaded orders local ✅");
 
-    document.getElementById("reloadAuto").onclick = () => {
-      (async () => {
-        await loadStateAuto();
-        if (activeFolder && folderCache.has(activeFolder)) {
-          const items = folderCache.get(activeFolder).items;
-          const ordered = applyOrder(activeFolder, items);
-          saveOrdersLocal();
-          renderItems(activeFolder, ordered);
-        }
-        alert("Reload (auto) ✅");
-      })().catch(err => {
+      if (activeFolder && folderCache.has(activeFolder)) {
+        const items = folderCache.get(activeFolder).items;
+        const ordered = applyOrder(activeFolder, items);
+        renderItems(activeFolder, ordered);
+      }
+    };
+    document.getElementById("uploadOrders").onclick = () => {
+      uploadOrdersJson().catch(err => {
         console.error(err);
         alert(String(err?.message || err));
         setStatus(String(err?.message || err));
       });
     };
-
-    document.getElementById("uploadWallpaper").onclick = () => {
-      uploadWallpaperJson().catch(err => {
+    document.getElementById("genAll").onclick = () => {
+      generateAllLikeBrowser().catch(err => {
         console.error(err);
         alert(String(err?.message || err));
         setStatus(String(err?.message || err));
@@ -1108,16 +1010,16 @@
       if (activeFolder && folderCache.has(activeFolder)) {
         const items = folderCache.get(activeFolder).items;
         const ordered = applyOrder(activeFolder, items);
-        saveOrdersLocal();
         renderItems(activeFolder, ordered);
       }
     });
 
     /** boot */
-    (async function boot(){
-      await loadStateAuto();   // hydrate từ wallpaper.json (nếu có token), fallback local
-      await loadFolders();
-    })().catch(err => setStatus(String(err?.message || err)));
+    (function boot(){
+      const st = loadOrdersLocal();
+      if (st) ordersState = st;
+      loadFolders().catch(err => setStatus(String(err?.message || err)));
+    })();
 </script>
 </body>
 </html>
