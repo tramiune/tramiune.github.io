@@ -86,7 +86,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Tự load orders.json · Item mới (chưa có trong order) sẽ tự lên đầu</span>
+    <span class="mut">Auto load orders.json (GitHub API) · Item mới chưa có trong order sẽ lên đầu</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -97,7 +97,7 @@
     </label>
 
     <button id="saveLocal">Save orders (local)</button>
-    <button id="loadLocal">Reload orders (auto)</button>
+    <button id="reloadAuto">Reload orders (auto)</button>
     <button id="uploadOrders">Upload dev/orders.json</button>
 
     <button id="genAll">Generate JSON (ALL like browser)</button>
@@ -141,7 +141,6 @@
 
     const OUTPUT_ALL_JSON = "dev/wallpaper.json";
     const ORDERS_PATH = "dev/orders.json";
-    const ORDERS_CDN = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@${BRANCH}/${ORDERS_PATH}`;
 
     const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
     const VIDEO_EXT = ["mp4","webm","mov"];
@@ -202,6 +201,8 @@
       return String(t);
     }
 
+    function hasToken(){ return !!elToken.value.trim(); }
+
     function getAuthToken(){
       const t = elToken.value.trim();
       if (!t) throw new Error("Bạn chưa nhập GitHub token (write).");
@@ -224,16 +225,6 @@
       return res.json();
     }
 
-    async function fetchJsonNoThrow(url){
-      try{
-        const res = await fetch(url, { cache:"no-store" });
-        if (!res.ok) return null;
-        return await res.json();
-      } catch {
-        return null;
-      }
-    }
-
     function ghContentsUrl(path){
       return `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodePath(path)}?ref=${encodeURIComponent(BRANCH)}`;
     }
@@ -244,6 +235,7 @@
     (function initToken(){
       const saved = localStorage.getItem(LS_TOKEN_ORDERS) || localStorage.getItem(LS_TOKEN_BROWSER);
       if (saved) { elToken.value = saved; elRememberToken.checked = true; }
+
       elRememberToken.addEventListener("change", () => {
         if (elRememberToken.checked) {
           if (elToken.value.trim()) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
@@ -251,6 +243,7 @@
           localStorage.removeItem(LS_TOKEN_ORDERS);
         }
       });
+
       elToken.addEventListener("input", () => {
         if (elRememberToken.checked) localStorage.setItem(LS_TOKEN_ORDERS, elToken.value.trim());
       });
@@ -266,6 +259,65 @@
       const raw = localStorage.getItem(LS_ORDERS);
       if (!raw) return null;
       try { return JSON.parse(raw); } catch { return null; }
+    }
+
+    /** ========= normalize/migrate orders ========= */
+    function normalizeOrdersState(st){
+      if (!st || typeof st !== "object") return null;
+      st.version ||= 1;
+      st.updatedAt ||= 0;
+      st.categories ||= {};
+      for (const k of Object.keys(st.categories)) {
+        st.categories[k].order ||= [];
+        st.categories[k].liveUsePreview ||= {};
+        st.categories[k].coupleUsePreview ||= {};
+      }
+      return st;
+    }
+
+    /** ========= load orders (NO CDN) ========= */
+    async function loadOrdersFromGitHub(){
+      // fresh nhất, nhưng cần token để call ổn định + tránh limit (private repo bắt buộc)
+      const meta = await fetchJson(ghContentsUrl(ORDERS_PATH), true);
+      const b64 = (meta.content || "").replace(/\n/g, "");
+      const txt = decodeURIComponent(escape(atob(b64)));
+      return JSON.parse(txt);
+    }
+
+    async function loadOrdersAuto(){
+      setStatus("Loading orders... (GitHub API -> local)");
+
+      const local = normalizeOrdersState(loadOrdersLocal());
+      let remote = null;
+
+      if (hasToken()) {
+        try {
+          remote = normalizeOrdersState(await loadOrdersFromGitHub());
+        } catch (e) {
+          console.warn("Load orders from GitHub failed:", e);
+          remote = null;
+        }
+      }
+
+      const lt = local?.updatedAt || 0;
+      const rt = remote?.updatedAt || 0;
+
+      if (remote && rt >= lt) {
+        ordersState = remote;
+        saveOrdersLocal();
+        setStatus(`✅ Using REMOTE orders (updatedAt=${rt})`);
+        return true;
+      }
+
+      if (local) {
+        ordersState = local;
+        setStatus(`✅ Using LOCAL orders (updatedAt=${lt})`);
+        return true;
+      }
+
+      ordersState = normalizeOrdersState({ version:1, updatedAt:0, categories:{} });
+      setStatus("⚠️ No orders found. Using empty state.");
+      return false;
     }
 
     /** ========= Git upsert text file ========= */
@@ -300,48 +352,6 @@
       }
     }
 
-    /** ========= Orders load (AUTO) =========
-     *  ưu tiên: CDN orders.json -> localStorage
-     */
-    function normalizeOrdersState(st){
-      if (!st || typeof st !== "object") return null;
-      st.version ||= 1;
-      st.updatedAt ||= 0;
-      st.categories ||= {};
-      for (const k of Object.keys(st.categories)) {
-        st.categories[k].order ||= [];
-        st.categories[k].liveUsePreview ||= {};
-        st.categories[k].coupleUsePreview ||= {};
-      }
-      return st;
-    }
-
-    async function loadOrdersAuto(){
-      setStatus("Loading orders... (CDN -> local)");
-      const fromCdn = await fetchJsonNoThrow(ORDERS_CDN);
-      if (fromCdn && normalizeOrdersState(fromCdn)) {
-        ordersState = fromCdn;
-        saveOrdersLocal(); // sync local để máy này nhớ
-        setStatus(`✅ Loaded orders from CDN (${ORDERS_PATH})`);
-        return true;
-      }
-
-      const stLocal = loadOrdersLocal();
-      if (stLocal && normalizeOrdersState(stLocal)) {
-        ordersState = stLocal;
-        setStatus("✅ Loaded orders from localStorage (fallback)");
-        return true;
-      }
-
-      ordersState = normalizeOrdersState({
-        version: 1,
-        updatedAt: 0,
-        categories: {}
-      });
-      setStatus("⚠️ No orders found. Using empty state.");
-      return false;
-    }
-
     /** ========= Orders helpers ========= */
     function ensureCategoryState(catId){
       if (!ordersState.categories[catId]) {
@@ -360,13 +370,7 @@
       st.order = ids;
     }
 
-    /**
-     * APPLY ORDER:
-     * - Nếu item mới (id chưa có trong st.order) => đưa lên ĐẦU
-     * - Các id cũ (còn tồn tại) giữ nguyên thứ tự
-     * - Id không còn tồn tại => bỏ khỏi order
-     * - Đồng thời cập nhật lại st.order sau khi merge để lần sau nhớ luôn
-     */
+    // item mới (chưa có trong order) -> lên đầu
     function applyOrder(catId, items){
       const st = ensureCategoryState(catId);
 
@@ -375,22 +379,19 @@
       const kept = [];
       const used = new Set();
 
-      // giữ thứ tự cũ (chỉ những id còn tồn tại)
       for (const id of oldOrder) {
         const it = byId.get(id);
         if (it) { kept.push(it); used.add(id); }
       }
 
-      // item mới (chưa có trong order) -> lên đầu
       const newlyAdded = [];
       for (const it of items) {
         if (!used.has(it.id)) newlyAdded.push(it);
       }
 
-      // new lên đầu, sau đó tới kept
       const out = [...newlyAdded, ...kept];
 
-      // cập nhật order luôn để persist
+      // persist merged order
       st.order = out.map(x => x.id);
 
       return out;
@@ -409,12 +410,12 @@
         }
       }
 
-      const doubleByNum = new Map(); // num -> {0,1}
-      const daysByNum = new Map();   // num -> Map(hour -> file)
-      const coupleByNum = new Map(); // num -> {single,0,1,preview}
+      const doubleByNum = new Map();
+      const daysByNum = new Map();
+      const coupleByNum = new Map();
 
-      const mp4ByKey = new Map();    // prefix|num -> file
-      const imgByKey = new Map();    // prefix|num -> file
+      const mp4ByKey = new Map();
+      const imgByKey = new Map();
 
       for (const name of fileNames) {
         if (isPreviewName(name)) {
@@ -548,11 +549,7 @@
         let couplePreviewUrl = "";
 
         if (obj.single) {
-          const previewFile =
-            obj.preview
-            || previewByBaseImage.get(obj.single)
-            || null;
-
+          const previewFile = obj.preview || previewByBaseImage.get(obj.single) || null;
           couplePreviewUrl = previewFile ? cdnUrl(folderName, previewFile) : "";
 
           medias.push({
@@ -639,7 +636,7 @@
         }
       }
 
-      // fallback chống trùng id trong 1 folder
+      // chống trùng id trong 1 folder
       const seen = new Map();
       for (const it of items) {
         const c = (seen.get(it.id) || 0) + 1;
@@ -815,6 +812,7 @@
         document.removeEventListener("pointerup", onUp, {passive:false});
         syncOrderFromDOM(catId);
         saveOrdersLocal();
+        setStatus(`Saved local: ${catId} (updatedAt=${ordersState.updatedAt})`);
       }
 
       function createGhostFrom(el){
@@ -903,9 +901,7 @@
     /** ========= loaders ========= */
     async function loadFolders() {
       setStatus("Loading folders... (GitHub Contents API)");
-      // list folders requires GitHub API; token giúp tránh rate limit
-      const useAuth = !!elToken.value.trim();
-      const data = await fetchJson(ghContentsUrl(ROOT_DIR), useAuth);
+      const data = await fetchJson(ghContentsUrl(ROOT_DIR), hasToken());
 
       allFolders = data
         .filter(x => x.type === "dir")
@@ -919,8 +915,7 @@
 
     async function listFolderFiles(folderName){
       const path = `${ROOT_DIR}/${folderName}`;
-      const useAuth = !!elToken.value.trim();
-      const data = await fetchJson(ghContentsUrl(path), useAuth);
+      const data = await fetchJson(ghContentsUrl(path), hasToken());
       return data.filter(x => x.type === "file").map(x => x.name);
     }
 
@@ -959,7 +954,6 @@
         }
       }
 
-      // IMPORTANT: applyOrder now merges new items to TOP and updates st.order
       const ordered = applyOrder(folderName, items);
       saveOrdersLocal();
 
@@ -967,13 +961,13 @@
       renderItems(folderName, ordered);
     }
 
-    /** ========= orders.json upload ========= */
+    /** ========= upload orders.json ========= */
     async function uploadOrdersJson(){
-      saveOrdersLocal();
+      saveOrdersLocal(); // bump updatedAt
       setStatus(`Uploading ${ORDERS_PATH} ...`);
       const txt = JSON.stringify(ordersState, null, 2);
       await upsertTextFile(ORDERS_PATH, txt, `Update orders (${ordersState.updatedAt})`);
-      setStatus(`✅ Uploaded ${ORDERS_PATH}`);
+      setStatus(`✅ Uploaded ${ORDERS_PATH} (updatedAt=${ordersState.updatedAt})`);
       alert("Upload orders.json xong ✅");
     }
 
@@ -1031,13 +1025,11 @@
           }
         }
 
-        // applyOrder merges new items to top as well (and updates order)
         const ordered = applyOrder(folderName, items);
 
         for (const it of ordered) {
           const id = uniqId(it.id, used);
-
-          const exportItem = {
+          out.push({
             id,
             medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
@@ -1046,8 +1038,7 @@
             subType: 0,
             type: it.type,
             coinToUnlock: 0
-          };
-          out.push(exportItem);
+          });
         }
       }
 
@@ -1064,7 +1055,7 @@
     /** ========= events ========= */
     document.getElementById("saveLocal").onclick = () => { saveOrdersLocal(); alert("Saved orders local ✅"); };
 
-    document.getElementById("loadLocal").onclick = () => {
+    document.getElementById("reloadAuto").onclick = () => {
       (async () => {
         await loadOrdersAuto();
         if (activeFolder && folderCache.has(activeFolder)) {
@@ -1109,7 +1100,8 @@
 
     /** boot */
     (async function boot(){
-      await loadOrdersAuto(); // IMPORTANT: auto load orders first
+      // token init chạy sync trước rồi, nên có thể auto-load orders remote nếu token đã lưu
+      await loadOrdersAuto();
       await loadFolders();
     })().catch(err => setStatus(String(err?.message || err)));
 </script>
