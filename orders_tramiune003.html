@@ -87,7 +87,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview · Premium checkbox</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -169,7 +169,7 @@
       version: 1,
       updatedAt: 0,
       categories: {
-        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{} }
+        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{}, premium:{} }
       }
     };
 
@@ -294,11 +294,17 @@
     /** ========= Orders helpers ========= */
     function ensureCategoryState(catId){
       if (!ordersState.categories[catId]) {
-        ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {} };
+        ordersState.categories[catId] = {
+          order: [],
+          liveUsePreview: {},
+          coupleUsePreview: {},
+          premium: {} // ✅ NEW
+        };
       } else {
         // migrate nếu file cũ chưa có
         ordersState.categories[catId].liveUsePreview ||= {};
         ordersState.categories[catId].coupleUsePreview ||= {};
+        ordersState.categories[catId].premium ||= {}; // ✅ NEW
         ordersState.categories[catId].order ||= [];
       }
       return ordersState.categories[catId];
@@ -617,16 +623,44 @@
 
         const meta = document.createElement("div");
         meta.className = "meta";
+
+        const prem = (st.premium[it.id] ?? it.isPremium ?? true);
+        it.isPremium = prem;
+
         meta.innerHTML = `
           <div class="row" style="justify-content:space-between;">
             <div class="name" title="${it.id}">${it.id}</div>
             <div class="handle" data-handle="1" title="Giữ để kéo">⠿ Drag</div>
           </div>
-          <div class="pill">${typeLabel(it.type)} · ${it.id}</div>
+          <div class="pill">${typeLabel(it.type)} · ${prem ? "Premium" : "Free"} · ${it.id}</div>
         `;
 
         const actions = document.createElement("div");
         actions.className = "actions";
+
+        // ===== PREMIUM toggle (NEW) =====
+        {
+          const lb = document.createElement("label");
+          lb.className = "mut";
+          lb.title = "Tick = Premium, Bỏ tick = Free";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = prem;
+
+          cb.onchange = () => {
+            st.premium[it.id] = cb.checked;
+            it.isPremium = cb.checked;
+
+            // update pill text (cheap way: rewrite the pill)
+            const pill = meta.querySelector(".pill");
+            if (pill) pill.textContent = `${typeLabel(it.type)} · ${cb.checked ? "Premium" : "Free"} · ${it.id}`;
+          };
+
+          lb.appendChild(cb);
+          lb.appendChild(document.createTextNode(" Premium"));
+          actions.appendChild(lb);
+        }
 
         const openBtn = document.createElement("a");
         openBtn.className = "btn";
@@ -674,7 +708,7 @@
           }
         }
 
-        // ===== COUPLE preview toggle (NEW) =====
+        // ===== COUPLE preview toggle =====
         if (it.type === TYPE.COUPLE) {
           const hasPreview = !!it._hasPreview;
           const defaultChecked = hasPreview ? (st.coupleUsePreview[it.id] ?? true) : false;
@@ -862,10 +896,13 @@
         folderCache.set(folderName, { files, items });
       }
 
-      // apply saved LIVE/COUPLE preview choice
       const st = ensureCategoryState(folderName);
 
+      // apply saved LIVE/COUPLE preview choice + premium
       for (const it of items) {
+        // Premium
+        it.isPremium = (st.premium[it.id] ?? it.isPremium ?? true);
+
         if (it.type === TYPE.LIVE) {
           const use = (st.liveUsePreview[it.id] ?? true);
           const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
@@ -935,8 +972,10 @@
 
         const st = ensureCategoryState(folderName);
 
-        // apply toggles before export
+        // apply toggles before export (preview + premium)
         for (const it of items) {
+          it.isPremium = (st.premium[it.id] ?? it.isPremium ?? true);
+
           if (it.type === TYPE.LIVE) {
             const use = (st.liveUsePreview[it.id] ?? true);
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
@@ -958,7 +997,7 @@
             id,
             medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
-            isPremium: true,
+            isPremium: !!it.isPremium,     // ✅ NEW: export theo checkbox
             createdAt: createdAt++,
             subType: 0,
             type: it.type,
