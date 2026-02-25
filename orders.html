@@ -87,7 +87,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview · Premium toggle</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -166,10 +166,10 @@
     let folderCache = new Map();  // folderName -> { files:[name], items:[item] }
 
     let ordersState = {
-      version: 1,
+      version: 2,
       updatedAt: 0,
       categories: {
-        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{} }
+        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{}, premiumById:{} }
       }
     };
 
@@ -179,7 +179,6 @@
     function pad3(n){ return String(n).padStart(3,"0"); }
     function encodePath(path){ return path.split("/").map(encodeURIComponent).join("/"); }
     function cdnUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
-    function folderDefaultPrefix(folderName){ return folderName.replace(/^\d+_/, ""); }
     function isPreviewName(name){ return name.includes("_preview."); }
     function contentTypeFromExt(name){
       const e=extOf(name);
@@ -294,15 +293,28 @@
     /** ========= Orders helpers ========= */
     function ensureCategoryState(catId){
       if (!ordersState.categories[catId]) {
-        ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {} };
+        ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {}, premiumById: {} };
       } else {
         // migrate nếu file cũ chưa có
         ordersState.categories[catId].liveUsePreview ||= {};
         ordersState.categories[catId].coupleUsePreview ||= {};
         ordersState.categories[catId].order ||= [];
+        ordersState.categories[catId].premiumById ||= {};
       }
       return ordersState.categories[catId];
     }
+
+    // Premium: default TRUE nếu chưa có config
+    function getPremium(catId, itemId){
+      const st = ensureCategoryState(catId);
+      const v = st.premiumById[itemId];
+      return (typeof v === "boolean") ? v : true;
+    }
+    function setPremium(catId, itemId, value){
+      const st = ensureCategoryState(catId);
+      st.premiumById[itemId] = !!value;
+    }
+
     function syncOrderFromDOM(catId){
       const st = ensureCategoryState(catId);
       const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
@@ -425,7 +437,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.DOUBLE,
@@ -457,7 +468,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.DAYS,
@@ -496,7 +506,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.COUPLE,
@@ -529,7 +538,6 @@
           items.push({
             id,
             categoryId,
-            isPremium: true,
             createdAt: createdAt++,
             subType: 0,
             type: TYPE.LIVE,
@@ -551,7 +559,6 @@
           items.push({
             id,
             categoryId,
-            isPremium: true,
             createdAt: createdAt++,
             subType: 0,
             type: TYPE.STILL,
@@ -636,6 +643,18 @@
         openBtn.rel = "noreferrer";
         actions.appendChild(openBtn);
 
+        // ===== isPremium checkbox (NEW) =====
+        const premLb = document.createElement("label");
+        premLb.className = "mut";
+        premLb.title = "Bỏ tick: export isPremium=false";
+        const premCb = document.createElement("input");
+        premCb.type = "checkbox";
+        premCb.checked = getPremium(catId, it.id);
+        premCb.onchange = () => setPremium(catId, it.id, premCb.checked);
+        premLb.appendChild(premCb);
+        premLb.appendChild(document.createTextNode(" isPremium"));
+        actions.appendChild(premLb);
+
         // ===== LIVE preview toggle =====
         if (it.type === TYPE.LIVE) {
           const hasPreview = !!it._hasPreview;
@@ -655,7 +674,6 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
 
-            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
@@ -674,7 +692,7 @@
           }
         }
 
-        // ===== COUPLE preview toggle (NEW) =====
+        // ===== COUPLE preview toggle =====
         if (it.type === TYPE.COUPLE) {
           const hasPreview = !!it._hasPreview;
           const defaultChecked = hasPreview ? (st.coupleUsePreview[it.id] ?? true) : false;
@@ -693,7 +711,6 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._couplePreviewUrl || "") : "";
 
-            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
@@ -878,6 +895,8 @@
           if (imgMedia) imgMedia.thumbUrl = use ? (it._couplePreviewUrl || "") : "";
           it._thumb = imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb;
         }
+        // premium is stored in ordersState; no need to mutate item now
+        // (export will read getPremium())
       }
 
       const ordered = applyOrder(folderName, items);
@@ -958,7 +977,7 @@
             id,
             medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
-            isPremium: true,
+            isPremium: getPremium(folderName, it.id), // ✅ NEW: per-item premium
             createdAt: createdAt++,
             subType: 0,
             type: it.type,
