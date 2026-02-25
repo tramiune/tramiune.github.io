@@ -87,7 +87,7 @@
 
 <header>
     <b>Orders</b>
-    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview · Premium checkbox</span>
+    <span class="mut">Kéo thả sắp xếp item theo folder · LIVE/COUPLE tick preview · Premium toggle</span>
 
     <input id="q" type="text" placeholder="Filter folder/item..." />
 
@@ -99,12 +99,12 @@
 
     <button id="saveLocal">Save orders (local)</button>
     <button id="loadLocal">Load orders (local)</button>
-    <button id="uploadOrders">Upload dev/orders_tramiune003.json</button>
+    <button id="uploadOrders">Upload dev/orders.json</button>
 
     <button id="genAll">Generate JSON (ALL like browser)</button>
     <span class="mut" id="rate"></span>
 
-    <a class="btn" href="./browser_tramiune003.html" target="_blank" rel="noreferrer">🧭 Browser</a>
+    <a class="btn" href="./browser_tramiune002.html" target="_blank" rel="noreferrer">🧭 Browser</a>
 </header>
 
 <div class="wrap">
@@ -135,13 +135,13 @@
      *  CONFIG
      *  ========================= */
     const OWNER = "tramiune";
-    const REPO  = "tramiune003_res_wallpaper_silly";
+    const REPO  = "tramiune002_res_ar";
     const BRANCH = "main";
     const ROOT_DIR = "resources";
     const CDN_BASE = `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}/${ROOT_DIR}/`;
 
     const OUTPUT_ALL_JSON = "dev/wallpaper.json";
-    const ORDERS_PATH = "dev/orders_tramiune003.json";
+    const ORDERS_PATH = "dev/orders.json";
 
     const IMAGE_EXT = ["webp","png","jpg","jpeg","gif"];
     const VIDEO_EXT = ["mp4","webm","mov"];
@@ -166,10 +166,10 @@
     let folderCache = new Map();  // folderName -> { files:[name], items:[item] }
 
     let ordersState = {
-      version: 1,
+      version: 2,
       updatedAt: 0,
       categories: {
-        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{}, premium:{} }
+        // [categoryId]: { order:[ids], liveUsePreview:{}, coupleUsePreview:{}, premiumById:{} }
       }
     };
 
@@ -179,7 +179,6 @@
     function pad3(n){ return String(n).padStart(3,"0"); }
     function encodePath(path){ return path.split("/").map(encodeURIComponent).join("/"); }
     function cdnUrl(folder, file){ return `${CDN_BASE}${folder}/${file}`; }
-    function folderDefaultPrefix(folderName){ return folderName.replace(/^\d+_/, ""); }
     function isPreviewName(name){ return name.includes("_preview."); }
     function contentTypeFromExt(name){
       const e=extOf(name);
@@ -294,21 +293,28 @@
     /** ========= Orders helpers ========= */
     function ensureCategoryState(catId){
       if (!ordersState.categories[catId]) {
-        ordersState.categories[catId] = {
-          order: [],
-          liveUsePreview: {},
-          coupleUsePreview: {},
-          premium: {} // ✅ NEW
-        };
+        ordersState.categories[catId] = { order: [], liveUsePreview: {}, coupleUsePreview: {}, premiumById: {} };
       } else {
         // migrate nếu file cũ chưa có
         ordersState.categories[catId].liveUsePreview ||= {};
         ordersState.categories[catId].coupleUsePreview ||= {};
-        ordersState.categories[catId].premium ||= {}; // ✅ NEW
         ordersState.categories[catId].order ||= [];
+        ordersState.categories[catId].premiumById ||= {};
       }
       return ordersState.categories[catId];
     }
+
+    // Premium: default TRUE nếu chưa có config
+    function getPremium(catId, itemId){
+      const st = ensureCategoryState(catId);
+      const v = st.premiumById[itemId];
+      return (typeof v === "boolean") ? v : true;
+    }
+    function setPremium(catId, itemId, value){
+      const st = ensureCategoryState(catId);
+      st.premiumById[itemId] = !!value;
+    }
+
     function syncOrderFromDOM(catId){
       const st = ensureCategoryState(catId);
       const ids = [...elList.querySelectorAll(".item")].map(x => x.dataset.id);
@@ -431,7 +437,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.DOUBLE,
@@ -463,7 +468,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.DAYS,
@@ -502,7 +506,6 @@
         items.push({
           id: `${categoryId}_${num}`,
           categoryId,
-          isPremium: true,
           createdAt: createdAt++,
           subType: 0,
           type: TYPE.COUPLE,
@@ -535,7 +538,6 @@
           items.push({
             id,
             categoryId,
-            isPremium: true,
             createdAt: createdAt++,
             subType: 0,
             type: TYPE.LIVE,
@@ -557,7 +559,6 @@
           items.push({
             id,
             categoryId,
-            isPremium: true,
             createdAt: createdAt++,
             subType: 0,
             type: TYPE.STILL,
@@ -623,44 +624,16 @@
 
         const meta = document.createElement("div");
         meta.className = "meta";
-
-        const prem = (st.premium[it.id] ?? it.isPremium ?? true);
-        it.isPremium = prem;
-
         meta.innerHTML = `
           <div class="row" style="justify-content:space-between;">
             <div class="name" title="${it.id}">${it.id}</div>
             <div class="handle" data-handle="1" title="Giữ để kéo">⠿ Drag</div>
           </div>
-          <div class="pill">${typeLabel(it.type)} · ${prem ? "Premium" : "Free"} · ${it.id}</div>
+          <div class="pill">${typeLabel(it.type)} · ${it.id}</div>
         `;
 
         const actions = document.createElement("div");
         actions.className = "actions";
-
-        // ===== PREMIUM toggle (NEW) =====
-        {
-          const lb = document.createElement("label");
-          lb.className = "mut";
-          lb.title = "Tick = Premium, Bỏ tick = Free";
-
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.checked = prem;
-
-          cb.onchange = () => {
-            st.premium[it.id] = cb.checked;
-            it.isPremium = cb.checked;
-
-            // update pill text (cheap way: rewrite the pill)
-            const pill = meta.querySelector(".pill");
-            if (pill) pill.textContent = `${typeLabel(it.type)} · ${cb.checked ? "Premium" : "Free"} · ${it.id}`;
-          };
-
-          lb.appendChild(cb);
-          lb.appendChild(document.createTextNode(" Premium"));
-          actions.appendChild(lb);
-        }
 
         const openBtn = document.createElement("a");
         openBtn.className = "btn";
@@ -669,6 +642,18 @@
         openBtn.target = "_blank";
         openBtn.rel = "noreferrer";
         actions.appendChild(openBtn);
+
+        // ===== isPremium checkbox (NEW) =====
+        const premLb = document.createElement("label");
+        premLb.className = "mut";
+        premLb.title = "Bỏ tick: export isPremium=false";
+        const premCb = document.createElement("input");
+        premCb.type = "checkbox";
+        premCb.checked = getPremium(catId, it.id);
+        premCb.onchange = () => setPremium(catId, it.id, premCb.checked);
+        premLb.appendChild(premCb);
+        premLb.appendChild(document.createTextNode(" isPremium"));
+        actions.appendChild(premLb);
 
         // ===== LIVE preview toggle =====
         if (it.type === TYPE.LIVE) {
@@ -689,7 +674,6 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._livePreviewUrl || "") : "";
 
-            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
@@ -727,7 +711,6 @@
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
             if (imgMedia) imgMedia.thumbUrl = cb.checked ? (it._couplePreviewUrl || "") : "";
 
-            // update thumb UI
             if (imgMedia) {
               it._thumb = (imgMedia.thumbUrl || imgMedia.url);
               imgEl.src = it._thumb;
@@ -896,13 +879,10 @@
         folderCache.set(folderName, { files, items });
       }
 
+      // apply saved LIVE/COUPLE preview choice
       const st = ensureCategoryState(folderName);
 
-      // apply saved LIVE/COUPLE preview choice + premium
       for (const it of items) {
-        // Premium
-        it.isPremium = (st.premium[it.id] ?? it.isPremium ?? true);
-
         if (it.type === TYPE.LIVE) {
           const use = (st.liveUsePreview[it.id] ?? true);
           const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
@@ -915,6 +895,8 @@
           if (imgMedia) imgMedia.thumbUrl = use ? (it._couplePreviewUrl || "") : "";
           it._thumb = imgMedia ? (imgMedia.thumbUrl || imgMedia.url) : it._thumb;
         }
+        // premium is stored in ordersState; no need to mutate item now
+        // (export will read getPremium())
       }
 
       const ordered = applyOrder(folderName, items);
@@ -972,10 +954,8 @@
 
         const st = ensureCategoryState(folderName);
 
-        // apply toggles before export (preview + premium)
+        // apply toggles before export
         for (const it of items) {
-          it.isPremium = (st.premium[it.id] ?? it.isPremium ?? true);
-
           if (it.type === TYPE.LIVE) {
             const use = (st.liveUsePreview[it.id] ?? true);
             const imgMedia = it.medias.find(m => (m.contentType||"").startsWith("image/"));
@@ -997,7 +977,7 @@
             id,
             medias: it.medias.map(m => ({ ...m })),
             categoryId: it.categoryId,
-            isPremium: !!it.isPremium,     // ✅ NEW: export theo checkbox
+            isPremium: getPremium(folderName, it.id), // ✅ NEW: per-item premium
             createdAt: createdAt++,
             subType: 0,
             type: it.type,
