@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drama Planner</title>
+    <link rel="stylesheet" href="drama-planner.css">
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="drama-planner-app">
+    <!-- Mobile Header -->
+    <header class="dp-mobile-header">
+        <div class="dp-logo">Drama Planner</div>
+        <button id="dp-mobile-menu-btn" class="dp-btn dp-btn-icon">☰</button>
+    </header>
+
+    <!-- Sidebar -->
+    <aside id="dp-sidebar" class="dp-sidebar">
+        <div class="dp-sidebar-header">
+            <h1 class="dp-logo">Drama Planner</h1>
+            <button id="dp-close-sidebar-btn" class="dp-btn dp-btn-icon dp-mobile-only">✕</button>
+        </div>
+        <nav class="dp-nav">
+            <a href="#dashboard" class="dp-nav-link active" data-target="dashboard">Dashboard</a>
+            <a href="#characters" class="dp-nav-link" data-target="characters">Characters</a>
+            <a href="#monthly-plan" class="dp-nav-link" data-target="monthly-plan">Monthly Plan</a>
+            <a href="#episodes" class="dp-nav-link" data-target="episodes">Episodes</a>
+            <a href="#scene-planner" class="dp-nav-link" data-target="scene-planner">Scene Planner</a>
+            <a href="#prompt-generator" class="dp-nav-link" data-target="prompt-generator">Prompt Generator</a>
+            <a href="#continuity" class="dp-nav-link" data-target="continuity">Continuity</a>
+            <a href="#settings" class="dp-nav-link" data-target="settings">Settings</a>
+        </nav>
+    </aside>
+
+    <main class="dp-main-content">
+        
+        <!-- View: Dashboard -->
+        <section id="dp-view-dashboard" class="dp-view active">
+            <header class="dp-view-header">
+                <h2>Channel Overview</h2>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.saveChannelInfo()">Save Changes</button>
+            </header>
+            <div class="dp-card">
+                <div class="dp-form-grid">
+                    <div class="dp-form-group">
+                        <label for="dp-channel-name">Channel Name</label>
+                        <input type="text" id="dp-channel-name" class="dp-input" placeholder="e.g. Drama Vibes">
+                    </div>
+                    <div class="dp-form-group">
+                        <label for="dp-channel-niche">Channel Niche</label>
+                        <input type="text" id="dp-channel-niche" class="dp-input" placeholder="Mother-in-law & Daughter-in-law">
+                    </div>
+                    <div class="dp-form-group dp-col-span-2">
+                        <label for="dp-channel-audience">Audience Description</label>
+                        <textarea id="dp-channel-audience" class="dp-input dp-textarea" placeholder="Describe your target audience..."></textarea>
+                    </div>
+                    <div class="dp-form-group">
+                        <label for="dp-channel-tone">Tone of Content</label>
+                        <input type="text" id="dp-channel-tone" class="dp-input" placeholder="e.g. Dramatic, Emotional, Suspenseful">
+                    </div>
+                    <div class="dp-form-group">
+                        <label for="dp-channel-frequency">Posting Frequency</label>
+                        <input type="text" id="dp-channel-frequency" class="dp-input" placeholder="e.g. Daily, 3 times a week">
+                    </div>
+                    <div class="dp-form-group dp-col-span-2">
+                        <label for="dp-channel-goals">Main Content Goals</label>
+                        <textarea id="dp-channel-goals" class="dp-input dp-textarea" placeholder="What are the goals of your content?"></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- View: Characters -->
+        <section id="dp-view-characters" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Character Bible</h2>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.openCharacterModal()">+ Add Character</button>
+            </header>
+            <div id="dp-characters-list" class="dp-grid"></div>
+        </section>
+
+        <!-- View: Monthly Plan -->
+        <section id="dp-view-monthly-plan" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Monthly Story Strategy</h2>
+            </header>
+            <div id="dp-monthly-plan-list"></div>
+        </section>
+
+        <!-- View: Episodes -->
+        <section id="dp-view-episodes" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Episodes</h2>
+            </header>
+            <div id="dp-episodes-list" class="dp-list"></div>
+        </section>
+
+        <!-- View: Scene Planner -->
+        <section id="dp-view-scene-planner" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Scene Planner</h2>
+                <select id="dp-scene-episode-select" class="dp-input dp-select" onchange="dpApp.renderScenePlanner()"></select>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.openSceneModal()">+ Add Scene</button>
+            </header>
+            <div id="dp-scene-planner-list" class="dp-list"></div>
+        </section>
+
+        <!-- View: Prompt Generator -->
+        <section id="dp-view-prompt-generator" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Prompt Generator</h2>
+            </header>
+            <div class="dp-card dp-prompt-container">
+                <div class="dp-prompt-actions">
+                    <button class="dp-btn dp-btn-secondary" onclick="dpApp.generateMonthlyStrategyPrompt()">Monthly Strategy</button>
+                    <button class="dp-btn dp-btn-secondary" onclick="dpApp.generateEpisodePrompt()">Episode Prompt</button>
+                    <button class="dp-btn dp-btn-secondary" onclick="dpApp.generateScenePrompt()">Scene Prompt</button>
+                </div>
+                <div class="dp-prompt-output-container">
+                    <textarea id="dp-prompt-output" class="dp-input dp-textarea" readonly placeholder="Your generated prompt will appear here..."></textarea>
+                    <button class="dp-btn dp-btn-primary dp-copy-btn" onclick="dpApp.copyPrompt()">Copy to Clipboard</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- View: Continuity -->
+        <section id="dp-view-continuity" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Continuity Tracker</h2>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.saveContinuity()">Save Tracker</button>
+            </header>
+            <div class="dp-card">
+                <div class="dp-form-group">
+                    <label>Current Relationships</label>
+                    <textarea id="dp-cont-relationships" class="dp-input dp-textarea" rows="4"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Unresolved Conflicts</label>
+                    <textarea id="dp-cont-conflicts" class="dp-input dp-textarea" rows="4"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Important Past Events</label>
+                    <textarea id="dp-cont-events" class="dp-input dp-textarea" rows="4"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Visual Consistency Notes</label>
+                    <textarea id="dp-cont-visuals" class="dp-input dp-textarea" rows="4"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Story Rules</label>
+                    <textarea id="dp-cont-rules" class="dp-input dp-textarea" rows="4"></textarea>
+                </div>
+            </div>
+        </section>
+
+        <!-- View: Settings -->
+        <section id="dp-view-settings" class="dp-view">
+            <header class="dp-view-header">
+                <h2>Settings</h2>
+            </header>
+            <div class="dp-card">
+                <h3>Theme Settings</h3>
+                <div class="dp-form-group">
+                    <label for="dp-theme-toggle">Theme Mode</label>
+                    <select id="dp-theme-toggle" class="dp-input dp-select" onchange="dpApp.toggleTheme(this.value)">
+                        <option value="dark">Dark Mode</option>
+                        <option value="light">Light Mode</option>
+                    </select>
+                </div>
+                <div class="dp-form-group">
+                    <label for="dp-accent-color">Accent Color</label>
+                    <input type="color" id="dp-accent-color" class="dp-color-picker" onchange="dpApp.updateAccentColor(this.value)">
+                </div>
+
+                <hr class="dp-divider">
+
+                <h3>Data Management</h3>
+                <p>All data is stored locally in your browser. Export it to back up your planning.</p>
+                <div class="dp-form-actions">
+                    <button class="dp-btn dp-btn-primary" onclick="dpApp.exportData()">Export Data (JSON)</button>
+                    <input type="file" id="dp-import-file" style="display:none" onchange="dpApp.importData(event)" accept=".json">
+                    <button class="dp-btn dp-btn-secondary" onclick="document.getElementById('dp-import-file').click()">Import Data</button>
+                    <button class="dp-btn dp-btn-secondary" onclick="dpApp.downloadPlanTxt()">Download Plan (TXT)</button>
+                    <button class="dp-btn dp-btn-danger" style="margin-left:auto" onclick="dpApp.resetData()">Reset All Data</button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modals -->
+    <!-- Character Modal -->
+    <div id="dp-modal-character" class="dp-modal">
+        <div class="dp-modal-content">
+            <header class="dp-modal-header">
+                <h3 id="dp-modal-character-title">Add Character</h3>
+                <button class="dp-btn dp-btn-icon" onclick="dpApp.closeModal('dp-modal-character')">✕</button>
+            </header>
+            <div class="dp-modal-body dp-form-grid">
+                <input type="hidden" id="dp-char-id">
+                <div class="dp-form-group">
+                    <label>Name</label>
+                    <input type="text" id="dp-char-name" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Role</label>
+                    <input type="text" id="dp-char-role" class="dp-input" placeholder="e.g. Mother-in-law">
+                </div>
+                <div class="dp-form-group">
+                    <label>Age</label>
+                    <input type="text" id="dp-char-age" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Speaking Style</label>
+                    <input type="text" id="dp-char-style" class="dp-input">
+                </div>
+                <div class="dp-form-group dp-col-span-2">
+                    <label>Personality</label>
+                    <textarea id="dp-char-personality" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group dp-col-span-2">
+                    <label>Visual Appearance & Clothing</label>
+                    <textarea id="dp-char-visual" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group dp-col-span-2">
+                    <label>Relationship Notes</label>
+                    <textarea id="dp-char-relationships" class="dp-input dp-textarea"></textarea>
+                </div>
+            </div>
+            <footer class="dp-modal-footer">
+                <button class="dp-btn dp-btn-secondary" onclick="dpApp.closeModal('dp-modal-character')">Cancel</button>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.saveCharacter()">Save Character</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Episode Detail Panel -->
+    <div id="dp-panel-episode" class="dp-side-panel">
+        <div class="dp-panel-content">
+            <header class="dp-panel-header">
+                <div>
+                    <span class="dp-badge" id="dp-ep-panel-number">Ep 1</span>
+                    <h3 id="dp-ep-panel-title">Episode Title</h3>
+                </div>
+                <button class="dp-btn dp-btn-icon" onclick="dpApp.closePanel('dp-panel-episode')">✕</button>
+            </header>
+            <div class="dp-panel-body">
+                <div class="dp-form-group">
+                    <label>Episode Title</label>
+                    <input type="text" id="dp-ep-edit-title" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Status</label>
+                    <select id="dp-ep-edit-status" class="dp-input dp-select">
+                        <option value="Idea">Idea</option>
+                        <option value="Drafting">Drafting</option>
+                        <option value="Ready">Ready</option>
+                        <option value="Produced">Produced</option>
+                    </select>
+                </div>
+                <div class="dp-form-group">
+                    <label>Summary</label>
+                    <textarea id="dp-ep-edit-summary" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Conflict</label>
+                    <textarea id="dp-ep-edit-conflict" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Hook / Beginning</label>
+                    <textarea id="dp-ep-edit-beginning" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Middle Escalation</label>
+                    <textarea id="dp-ep-edit-middle" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Ending / Resolution</label>
+                    <textarea id="dp-ep-edit-ending" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Cliffhanger</label>
+                    <textarea id="dp-ep-edit-cliffhanger" class="dp-input dp-textarea"></textarea>
+                </div>
+                <input type="hidden" id="dp-ep-edit-id">
+                <button class="dp-btn dp-btn-primary dp-w-full" onclick="dpApp.saveEpisodeDetail()">Save Episode</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scene Modal -->
+    <div id="dp-modal-scene" class="dp-modal">
+        <div class="dp-modal-content">
+            <header class="dp-modal-header">
+                <h3 id="dp-modal-scene-title">Add Scene</h3>
+                <button class="dp-btn dp-btn-icon" onclick="dpApp.closeModal('dp-modal-scene')">✕</button>
+            </header>
+            <div class="dp-modal-body dp-form-grid">
+                <input type="hidden" id="dp-scene-id">
+                <div class="dp-form-group">
+                    <label>Scene Letter/Number</label>
+                    <input type="text" id="dp-scene-num" class="dp-input" placeholder="e.g. 1A">
+                </div>
+                <div class="dp-form-group">
+                    <label>Location</label>
+                    <input type="text" id="dp-scene-location" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Characters in scene</label>
+                    <input type="text" id="dp-scene-chars" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Emotion / Vibe</label>
+                    <input type="text" id="dp-scene-emotion" class="dp-input">
+                </div>
+                <div class="dp-form-group dp-col-span-2">
+                    <label>Visual Description</label>
+                    <textarea id="dp-scene-visual" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group dp-col-span-2">
+                    <label>Dialogue Notes</label>
+                    <textarea id="dp-scene-dialogue" class="dp-input dp-textarea"></textarea>
+                </div>
+                <div class="dp-form-group">
+                    <label>Camera Angle</label>
+                    <input type="text" id="dp-scene-angle" class="dp-input">
+                </div>
+                <div class="dp-form-group">
+                    <label>Video Prompt (for Veo/Midjourney)</label>
+                    <input type="text" id="dp-scene-prompt" class="dp-input">
+                </div>
+            </div>
+            <footer class="dp-modal-footer">
+                <button class="dp-btn dp-btn-secondary" onclick="dpApp.closeModal('dp-modal-scene')">Cancel</button>
+                <button class="dp-btn dp-btn-primary" onclick="dpApp.saveScene()">Save Scene</button>
+            </footer>
+        </div>
+    </div>
+</div>
+
+<script src="drama-planner.js"></script>
+</body>
+</html>

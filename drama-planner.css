@@ -1,0 +1,515 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Variables and Reset scoped to #drama-planner-app to avoid global leakage */
+#drama-planner-app {
+    /* Color Palette - Default Dark */
+    --dp-bg-base: #0f172a;
+    --dp-bg-surface: #1e293b;
+    --dp-bg-surface-hover: #334155;
+    --dp-text-primary: #f8fafc;
+    --dp-text-secondary: #94a3b8;
+    --dp-border-color: #334155;
+    
+    --dp-accent: #6366f1;
+    --dp-accent-hover: #4f46e5;
+    --dp-accent-glow: rgba(99, 102, 241, 0.4);
+    
+    --dp-danger: #ef4444;
+    --dp-success: #10b981;
+    --dp-warning: #f59e0b;
+
+    /* Typography */
+    --dp-font: 'Inter', sans-serif;
+    
+    /* Metrics */
+    --dp-sidebar-width: 260px;
+    --dp-header-height: 60px;
+    --dp-border-radius: 8px;
+    --dp-padding: 24px;
+    --dp-transition: 0.2s ease;
+
+    font-family: var(--dp-font);
+    background-color: var(--dp-bg-base);
+    color: var(--dp-text-primary);
+    min-height: 100vh;
+    display: flex;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+#drama-planner-app * {
+    box-sizing: inherit;
+}
+
+/* Light Theme Variables */
+#drama-planner-app.dp-theme-light {
+    --dp-bg-base: #f1f5f9;
+    --dp-bg-surface: #ffffff;
+    --dp-bg-surface-hover: #e2e8f0;
+    --dp-text-primary: #0f172a;
+    --dp-text-secondary: #64748b;
+    --dp-border-color: #cbd5e1;
+}
+
+/* Layout */
+#drama-planner-app .dp-sidebar {
+    width: var(--dp-sidebar-width);
+    background-color: var(--dp-bg-surface);
+    border-right: 1px solid var(--dp-border-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    transition: transform var(--dp-transition);
+}
+
+#drama-planner-app .dp-sidebar-header {
+    height: var(--dp-header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--dp-border-color);
+}
+
+#drama-planner-app .dp-logo {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--dp-accent);
+    letter-spacing: 0.5px;
+}
+
+#drama-planner-app .dp-nav {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    gap: 5px;
+    overflow-y: auto;
+}
+
+#drama-planner-app .dp-nav-link {
+    padding: 12px 20px;
+    color: var(--dp-text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: all var(--dp-transition);
+    border-left: 3px solid transparent;
+}
+
+#drama-planner-app .dp-nav-link:hover {
+    background-color: var(--dp-bg-surface-hover);
+    color: var(--dp-text-primary);
+}
+
+#drama-planner-app .dp-nav-link.active {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--dp-accent);
+    border-left-color: var(--dp-accent);
+}
+
+#drama-planner-app .dp-main-content {
+    flex: 1;
+    margin-left: var(--dp-sidebar-width);
+    padding: var(--dp-padding);
+    width: calc(100% - var(--dp-sidebar-width));
+}
+
+#drama-planner-app .dp-mobile-header {
+    display: none;
+    height: var(--dp-header-height);
+    background-color: var(--dp-bg-surface);
+    border-bottom: 1px solid var(--dp-border-color);
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+}
+
+/* Views */
+#drama-planner-app .dp-view {
+    display: none;
+    animation: dp-fade-in var(--dp-transition);
+}
+
+#drama-planner-app .dp-view.active {
+    display: block;
+}
+
+@keyframes dp-fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#drama-planner-app .dp-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+#drama-planner-app .dp-view-header h2 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+/* Components */
+#drama-planner-app .dp-card {
+    background-color: var(--dp-bg-surface);
+    border: 1px solid var(--dp-border-color);
+    border-radius: var(--dp-border-radius);
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+#drama-planner-app .dp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: all var(--dp-transition);
+}
+
+#drama-planner-app .dp-btn-primary {
+    background-color: var(--dp-accent);
+    color: white;
+    box-shadow: 0 2px 4px var(--dp-accent-glow);
+}
+
+#drama-planner-app .dp-btn-primary:hover {
+    background-color: var(--dp-accent-hover);
+    transform: translateY(-1px);
+}
+
+#drama-planner-app .dp-btn-secondary {
+    background-color: transparent;
+    color: var(--dp-text-primary);
+    border: 1px solid var(--dp-border-color);
+}
+
+#drama-planner-app .dp-btn-secondary:hover {
+    background-color: var(--dp-bg-surface-hover);
+}
+
+#drama-planner-app .dp-btn-danger {
+    background-color: var(--dp-danger);
+    color: white;
+}
+
+#drama-planner-app .dp-btn-icon {
+    padding: 8px;
+    background: transparent;
+    color: var(--dp-text-secondary);
+    font-size: 1.2rem;
+}
+
+#drama-planner-app .dp-btn-icon:hover {
+    color: var(--dp-text-primary);
+}
+
+#drama-planner-app .dp-w-full {
+    width: 100%;
+}
+
+/* Forms */
+#drama-planner-app .dp-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+#drama-planner-app .dp-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+#drama-planner-app .dp-col-span-2 {
+    grid-column: span 2;
+}
+
+#drama-planner-app label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--dp-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#drama-planner-app .dp-input {
+    background-color: var(--dp-bg-base);
+    border: 1px solid var(--dp-border-color);
+    color: var(--dp-text-primary);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: border-color var(--dp-transition);
+}
+
+#drama-planner-app .dp-input:focus {
+    outline: none;
+    border-color: var(--dp-accent);
+    box-shadow: 0 0 0 2px var(--dp-accent-glow);
+}
+
+#drama-planner-app .dp-textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+#drama-planner-app .dp-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 1em;
+    padding-right: 40px;
+}
+
+/* Grids and Lists */
+#drama-planner-app .dp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+#drama-planner-app .dp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#drama-planner-app .dp-list-item {
+    background-color: var(--dp-bg-surface);
+    border: 1px solid var(--dp-border-color);
+    border-radius: var(--dp-border-radius);
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: all var(--dp-transition);
+}
+
+#drama-planner-app .dp-list-item:hover {
+    border-color: var(--dp-accent);
+    transform: translateX(4px);
+}
+
+/* Modals */
+#drama-planner-app .dp-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+#drama-planner-app .dp-modal.active {
+    display: flex;
+}
+
+#drama-planner-app .dp-modal-content {
+    background-color: var(--dp-bg-surface);
+    border: 1px solid var(--dp-border-color);
+    border-radius: var(--dp-border-radius);
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+#drama-planner-app .dp-modal-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--dp-border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#drama-planner-app .dp-modal-header h3 {
+    margin: 0;
+}
+
+#drama-planner-app .dp-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+#drama-planner-app .dp-modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--dp-border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Side Panels */
+#drama-planner-app .dp-side-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    background-color: var(--dp-bg-surface);
+    border-left: 1px solid var(--dp-border-color);
+    z-index: 900;
+    transition: right var(--dp-transition);
+    box-shadow: -10px 0 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+#drama-planner-app .dp-side-panel.active {
+    right: 0;
+}
+
+#drama-planner-app .dp-panel-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+#drama-planner-app .dp-panel-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--dp-border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+#drama-planner-app .dp-panel-header h3 {
+    margin: 5px 0 0 0;
+}
+
+#drama-planner-app .dp-panel-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Utilities */
+#drama-planner-app .dp-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    background-color: var(--dp-bg-surface-hover);
+    color: var(--dp-text-primary);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+#drama-planner-app .dp-badge-status-Idea { border-bottom: 2px solid var(--dp-text-secondary); }
+#drama-planner-app .dp-badge-status-Drafting { border-bottom: 2px solid var(--dp-warning); }
+#drama-planner-app .dp-badge-status-Ready { border-bottom: 2px solid var(--dp-accent); }
+#drama-planner-app .dp-badge-status-Produced { border-bottom: 2px solid var(--dp-success); }
+
+
+#drama-planner-app .dp-divider {
+    border: none;
+    border-top: 1px solid var(--dp-border-color);
+    margin: 24px 0;
+}
+
+/* Monthly Plan specific */
+#drama-planner-app .dp-week-group {
+    margin-bottom: 32px;
+}
+
+#drama-planner-app .dp-week-header {
+    font-size: 1.2rem;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--dp-border-color);
+    margin-bottom: 16px;
+    color: var(--dp-accent);
+}
+
+/* Prompt Generator specific */
+#drama-planner-app .dp-prompt-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+#drama-planner-app .dp-prompt-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+#drama-planner-app .dp-prompt-output-container {
+    position: relative;
+}
+#drama-planner-app #dp-prompt-output {
+    min-height: 300px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+#drama-planner-app .dp-copy-btn {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #drama-planner-app {
+        flex-direction: column;
+    }
+    #drama-planner-app .dp-sidebar {
+        transform: translateX(-100%);
+    }
+    #drama-planner-app .dp-sidebar.active {
+        transform: translateX(0);
+    }
+    #drama-planner-app .dp-main-content {
+        margin-left: 0;
+        width: 100%;
+        padding-top: calc(var(--dp-header-height) + 20px);
+    }
+    #drama-planner-app .dp-mobile-header {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        z-index: 90;
+    }
+    #drama-planner-app .dp-mobile-only {
+        display: block;
+    }
+    #drama-planner-app .dp-form-grid {
+        grid-template-columns: 1fr;
+    }
+    #drama-planner-app .dp-col-span-2 {
+        grid-column: span 1;
+    }
+    #drama-planner-app .dp-side-panel {
+        width: 100%;
+        right: -100%;
+    }
+}
+@media (min-width: 769px) {
+    #drama-planner-app .dp-mobile-only {
+        display: none;
+    }
+}
