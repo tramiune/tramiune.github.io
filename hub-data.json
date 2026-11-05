@@ -1,5 +1,5 @@
 {
-  "server_time": "15:07 — 05/11/2026",
+  "server_time": "15:09 — 05/11/2026",
   "launch_targets": [
     {
       "app": "003 — Silly Smiles Wallpaper 4K",
@@ -34,22 +34,22 @@
     {
       "app": "005 — LED Banner & Edge Lighting",
       "folder": "tramiune005_led_banner",
-      "submit_date": "🎯 Ngày mai (06/11) — Bản v1.0.0",
-      "tester_window": "⏳ 06/11 → 20/11 (14 ngày Tester)",
-      "production_date": "🏆 20/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 23/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Hôm nay & mai hoàn thiện MVP + Store Listing -> Tối 06/11 submit vào 14 ngày Tester -> 20/11 lên Store."
+      "submit_date": "🎯 Hôm nay (05/11) — Bản v1.0.0",
+      "tester_window": "⏳ 05/11 → 19/11 (14 ngày Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + cách ly Keystore + Store Assets + Build AAB 35MB -> Submit ngay hôm nay (05/11) -> 19/11 lên Store."
     },
     {
       "app": "004 — AI Photo Studio: Art & Restore",
       "folder": "tramiune004_ai_photo",
-      "submit_date": "🎯 Ngày 09/11/2026 — Bản v1.0.0",
-      "tester_window": "⏳ 09/11 → 23/11 (14 ngày Tester)",
-      "production_date": "🏆 23/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 26/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Tận dụng 3 ngày (07/11–09/11) khi 002 & 005 đang chạy Tester để code xong 004 -> Submit ngày 09/11."
+      "submit_date": "🎯 Hôm nay (05/11) — Bản v1.0.0",
+      "tester_window": "⏳ 05/11 → 19/11 (14 ngày Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + cách ly Keystore + Store Assets + Build AAB 35MB -> Submit ngay hôm nay (05/11) -> 19/11 lên Store."
     },
     {
       "app": "006 — Glow Art: Neon Spinner",
@@ -86,11 +86,11 @@
         },
         {
           "done": true,
-          "text": "[XONG] Hoàn thiện code MVP 005_led_banner + Build xong .aab v1.0.0 (LEDBanner_1.0.0_05.11.2026_14.33.04-prod-release.aab — 40MB)."
+          "text": "[XONG] Hoàn thiện code MVP + cách ly Keystore + Store Assets + Build .aab 35MB cho cả 004_ai_photo và 005_led_banner."
         },
         {
           "done": false,
-          "text": "[TỐI MAI 06/11] Submit 005_led_banner lên Google Play Console và kích hoạt 20 Testers (Bắt đầu đếm 14 ngày: 06/11 -> 20/11)."
+          "text": "[HÔM NAY 05/11] Submit 004_ai_photo và 005_led_banner lên Google Play Console Closed Testing (Bắt đầu đếm 14 ngày: 05/11 -> 19/11)."
         }
       ]
     },
@@ -221,22 +221,22 @@
     {
       "app": "005 — LED Banner & Edge Lighting",
       "folder": "tramiune005_led_banner",
-      "submit_date": "🎯 Ngày mai (06/11) — Bản v1.0.0",
-      "tester_window": "⏳ 06/11 → 20/11 (14 ngày Tester)",
-      "production_date": "🏆 20/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 23/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Hôm nay & mai hoàn thiện MVP + Store Listing -> Tối 06/11 submit vào 14 ngày Tester -> 20/11 lên Store."
+      "submit_date": "🎯 Hôm nay (05/11) — Bản v1.0.0",
+      "tester_window": "⏳ 05/11 → 19/11 (14 ngày Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + cách ly Keystore + Store Assets + Build AAB 35MB -> Submit ngay hôm nay (05/11) -> 19/11 lên Store."
     },
     {
       "app": "004 — AI Photo Studio: Art & Restore",
       "folder": "tramiune004_ai_photo",
-      "submit_date": "🎯 Ngày 09/11/2026 — Bản v1.0.0",
-      "tester_window": "⏳ 09/11 → 23/11 (14 ngày Tester)",
-      "production_date": "🏆 23/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 26/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Tận dụng 3 ngày (07/11–09/11) khi 002 & 005 đang chạy Tester để code xong 004 -> Submit ngày 09/11."
+      "submit_date": "🎯 Hôm nay (05/11) — Bản v1.0.0",
+      "tester_window": "⏳ 05/11 → 19/11 (14 ngày Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + cách ly Keystore + Store Assets + Build AAB 35MB -> Submit ngay hôm nay (05/11) -> 19/11 lên Store."
     },
     {
       "app": "006 — Glow Art: Neon Spinner",
@@ -364,28 +364,28 @@
       "folder": "tramiune005_led_banner",
       "package_id": "com.tramiune005.app.ledbanner",
       "stage": "IN_REVIEW",
-      "status_badge": "🟢 ĐÃ BUILD AAB v1.0.0 (40MB) -> SUBMIT (06/11) -> LÊN STORE (20/11)",
-      "target_dates": "Submit Tester: 06/11 (v1.0.0) | Update Ngày 7: 13/11 | Lên Production: 20/11/2026",
-      "during_wait_work": "Trong 14 ngày chờ Tester (06/11 -> 20/11): (1) Ngày 13/11 code thêm hiệu ứng nháy đèn Flash theo nhịp nhạc + thêm 15 mẫu viền sáng RGB/Silly Smile chạy quanh tai thỏ để đẩy bản v1.0.1; (2) Quay 4 video quảng cáo theo đúng 12 Video Win (tỏ tình, đi concert, viền sáng RGB trong tối).",
+      "status_badge": "🟢 ĐÃ BUILD AAB v1.0.0 (35MB) -> SUBMIT HÔM NAY (05/11) -> LÊN STORE (19/11)",
+      "target_dates": "Submit Tester: 05/11 (v1.0.0) | Update Ngày 7: 12/11 | Lên Production: 19/11/2026",
+      "during_wait_work": "Trong 14 ngày chờ Tester (05/11 -> 19/11): (1) Ngày 12/11 code thêm hiệu ứng nháy đèn Flash theo nhịp nhạc + thêm 15 mẫu viền sáng RGB/Silly Smile chạy quanh tai thỏ để đẩy bản v1.0.1; (2) Quay 4 video quảng cáo theo đúng 12 Video Win (tỏ tình, đi concert, viền sáng RGB trong tối).",
       "tasks": [
         {
           "title": "Khởi tạo project & code bộ dựng LED Scroller + Edge Lighting RGB + Fullscreen Concert Mode",
           "done": true
         },
         {
-          "title": "Đóng gói MVP & Build xong file AAB v1.0.0 (LEDBanner_1.0.0_05.11.2026_14.33.04-prod-release.aab — tắt Ads mặc định)",
+          "title": "Cách ly Keystore riêng (6174e2b4...), gỡ specialUse FGS, tạo bộ ảnh Store Assets & Build AAB v1.0.0 (35MB)",
           "done": true
         },
         {
-          "title": "Tối mai (06/11): Tạo app trên Play Console, up AAB v1.0.0 & kích hoạt 20 Testers",
+          "title": "Hôm nay (05/11): Tạo app trên Play Console, up AAB v1.0.0 & kích hoạt 20 Testers",
           "done": false
         },
         {
-          "title": "Ngày 13/11 (Ngày thứ 7 Tester): Thêm mẫu viền RGB & up bản phụ v1.0.1",
+          "title": "Ngày 12/11 (Ngày thứ 7 Tester): Thêm mẫu viền RGB & up bản phụ v1.0.1",
           "done": false
         },
         {
-          "title": "Ngày 20/11 (Đủ 14 ngày): Bấm Apply for Production -> Lên Store & chạy UAC",
+          "title": "Ngày 19/11 (Đủ 14 ngày): Bấm Apply for Production -> Lên Store & chạy UAC",
           "done": false
         }
       ],
@@ -393,8 +393,8 @@
         "exists_on_disk": true,
         "version_name": "1.0.0",
         "version_code": 100,
-        "aab_file": null,
-        "aab_size_mb": null
+        "aab_file": "LEDBanner_1.0.0_05.11.2026_15.06.27-prod-release.aab",
+        "aab_size_mb": 35.1
       },
       "progress": 40
     },
@@ -466,9 +466,9 @@
         }
       ],
       "live": {
-        "exists_on_disk": false,
-        "version_name": null,
-        "version_code": null,
+        "exists_on_disk": true,
+        "version_name": "1.0.0",
+        "version_code": 100,
         "aab_file": null,
         "aab_size_mb": null
       },
