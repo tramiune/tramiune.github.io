@@ -369,6 +369,63 @@ def record_session_log(tester_id: str, app_key: str, duration_sec: int, ip_addr:
     save_state(data)
 
 
+def manage_real_phone_multi_users(serial: str, action_mode: str, app_arg: str, cfg: dict, duration_sec: int):
+    """
+    Uses Android's native Multi-User isolation (`pm create-user` / `am switch-user`) on a real physical phone
+    so 1 physical phone provides up to 4 completely isolated `MEETS_DEVICE_INTEGRITY` hardware testers!
+    """
+    max_out = run_adb(serial, ["shell", "pm", "get-max-users"])
+    users_out = run_adb(serial, ["shell", "pm", "list", "users"])
+    print(f"📱 Real Phone [{serial}] Multi-User Info:\n{max_out}\n{users_out}")
+
+    # Parse existing user IDs
+    user_ids = []
+    for line in users_out.splitlines():
+        if "UserInfo{" in line:
+            try:
+                uid = int(line.split("UserInfo{")[1].split(":")[0])
+                user_ids.append(uid)
+            except Exception:
+                pass
+
+    if action_mode == "create-users":
+        target_total = 4
+        while len(user_ids) < target_total:
+            new_idx = len(user_ids)
+            res = run_adb(serial, ["shell", "pm", "create-user", f"Tester_HW_{new_idx}"])
+            print(f"   ➕ Created isolated hardware user: {res}")
+            if "Success" not in res:
+                break
+            user_ids.append(-1)
+        print("✅ Done creating isolated hardware users! Use `--action switch-phone-user --tester <user_id>` or `--action daily-phone-users` to run.")
+        return
+
+    apps = cfg["apps"]
+    target_apps = list(apps.keys()) if app_arg == "all" else [app_arg]
+    ip_addr = get_host_public_ip().get("ip", "")
+
+    for uid in user_ids:
+        print(f"\n🔀 Switching real phone [{serial}] to isolated Hardware User ID: {uid}...")
+        run_adb(serial, ["shell", "am", "switch-user", str(uid)])
+        time.sleep(6.0)
+        wake_and_unlock(serial)
+        for app_key in target_apps:
+            if app_key not in apps:
+                continue
+            simulate_human_session_on_device(
+                serial,
+                f"{serial}_User{uid}",
+                app_key,
+                apps[app_key],
+                duration_sec,
+                0.0,
+                ip_addr,
+            )
+    # Switch back to Owner (User 0) when finished
+    run_adb(serial, ["shell", "am", "switch-user", "0"])
+    print(f"✅ All {len(user_ids)} hardware users on [{serial}] completed daily sessions and returned to Owner (User 0)!")
+
+
 def export_emails_csv(cfg: dict):
     testers = cfg["testers"]
     emails = [t["email"].strip() for t in testers if t.get("email", "").strip()]
@@ -603,6 +660,8 @@ def main():
             "login-wizard",
             "install-wizard",
             "daily-batch",
+            "create-phone-users",
+            "daily-phone-users",
             "open-play",
             "daily-run",
             "feedback",
@@ -626,6 +685,14 @@ def main():
         export_emails_csv(cfg)
     elif args.action == "import-accounts":
         import_accounts_from_file(cfg, args.accounts_file)
+    elif args.action in ("create-phone-users", "daily-phone-users"):
+        phys = [d for d in get_connected_devices() if not d.startswith("emulator-")]
+        if not phys:
+            print("❌ No physical USB phone detected. Plug in your Android phone first.")
+            return
+        mode = "create-users" if args.action == "create-phone-users" else "daily-run"
+        for p_serial in phys:
+            manage_real_phone_multi_users(p_serial, mode, args.app, cfg, args.duration)
     elif args.action == "check-ip":
         info = get_host_public_ip()
         print(json.dumps(info, indent=2, ensure_ascii=False))
