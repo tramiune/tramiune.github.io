@@ -1,5 +1,5 @@
 {
-  "server_time": "18:04 — 05/11/2026",
+  "server_time": "18:06 — 05/11/2026",
   "launch_targets": [
     {
       "app": "001 — Live Wallpaper 4K",
@@ -62,14 +62,14 @@
       "goal_summary": "Đã fix sạch Families Policy & có AAB v1.1.4. Chạy song song 14 ngày Tester để lên Production đợt 19/11."
     },
     {
-      "app": "007 — Rolling Icon 3D & Screen Pets",
+      "app": "007 — Rolling Icon: 3D Gravity & Pet",
       "folder": "tramiune007_rolling_icon",
-      "submit_date": "🎯 Mục tiêu: 08/11 – 09/11/2026",
-      "tester_window": "⏳ 09/11 → 23/11 (14 ngày Tester)",
-      "production_date": "🏆 23/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 26/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Trong lúc 004, 005, 006 đang chạy tuần đầu 14 ngày Tester -> Bắt tay code tiếp App 007 (Top 3 Ngách ~270K tải/tháng)."
+      "submit_date": "✅ ĐÃ CÓ AAB v1.0.0 (05/11) — Sẵn sàng Submit!",
+      "tester_window": "🔥 05/11 → 19/11 (Chạy chung dàn 12-15 Testers với 004, 005, 006)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã hoàn thiện 100% code Vật lý Trọng lực 2D + Shimeji Screen Pets, Store Listing, Privacy Policy & xuất AAB 24MB! Có thể Submit ngay để chạy chung đợt 14 ngày Tester tối nay."
     }
   ],
   "master_timeline": [
@@ -216,14 +216,14 @@
       "goal_summary": "Đã fix sạch Families Policy & có AAB v1.1.4. Chạy song song 14 ngày Tester để lên Production đợt 19/11."
     },
     {
-      "app": "007 — Rolling Icon 3D & Screen Pets",
+      "app": "007 — Rolling Icon: 3D Gravity & Pet",
       "folder": "tramiune007_rolling_icon",
-      "submit_date": "🎯 Mục tiêu: 08/11 – 09/11/2026",
-      "tester_window": "⏳ 09/11 → 23/11 (14 ngày Tester)",
-      "production_date": "🏆 23/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 26/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Trong lúc 004, 005, 006 đang chạy tuần đầu 14 ngày Tester -> Bắt tay code tiếp App 007 (Top 3 Ngách ~270K tải/tháng)."
+      "submit_date": "✅ ĐÃ CÓ AAB v1.0.0 (05/11) — Sẵn sàng Submit!",
+      "tester_window": "🔥 05/11 → 19/11 (Chạy chung dàn 12-15 Testers với 004, 005, 006)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã hoàn thiện 100% code Vật lý Trọng lực 2D + Shimeji Screen Pets, Store Listing, Privacy Policy & xuất AAB 24MB! Có thể Submit ngay để chạy chung đợt 14 ngày Tester tối nay."
     }
   ],
   "projects": [
@@ -346,6 +346,42 @@
         "aab_size_mb": 24.2
       },
       "progress": 40
+    },
+    {
+      "id": "tramiune007_rolling_icon",
+      "name": "4. Rolling Icon: 3D Gravity & Pet (tramiune007)",
+      "folder": "tramiune007_rolling_icon",
+      "package_id": "com.tramiune007.app.rollingicon",
+      "stage": "IN_REVIEW",
+      "status_badge": "✅ ĐÃ CÓ AAB 24MB (v1.0.0) + STORE LISTING — SẴN SÀNG SUBMIT!",
+      "target_dates": "Build xong: 05/11 (v1.0.0) | Update Ngày 7 (v1.0.1): 12/11 | Apply Production: 19/11/2026",
+      "during_wait_work": "Submit luôn lên Google Play Console để gộp chạy chung đợt 14 ngày Tester (05/11 -> 19/11) với 004, 005, 006 trên máy KYG02 + dàn 12 máy ảo!",
+      "tasks": [
+        {
+          "title": "Hoàn thiện Vật lý Trọng lực 2D (Accelerometer Tilt + Drag/Fling/Shake/Vortex) + 6 Shimeji Screen Pets + Live Wallpaper 60fps",
+          "done": true
+        },
+        {
+          "title": "Tạo Keystore riêng, fix sạch AdMob Site Behavior: Navigation, tạo Store Listing + Privacy Policy (privacy-policy-007.html) & xuất AAB 24MB",
+          "done": true
+        },
+        {
+          "title": "Tạo app trên Google Play Console & Submit bản v1.0.0 vào nhánh Closed Testing",
+          "done": false
+        },
+        {
+          "title": "Chạy chung dàn 12-15 Testers (05/11 -> 19/11) & đẩy bản phụ v1.0.1 ở Ngày thứ 7 (12/11)",
+          "done": false
+        }
+      ],
+      "live": {
+        "exists_on_disk": true,
+        "version_name": "1.0.0",
+        "version_code": 100,
+        "aab_file": "RollingIcon_1.0.0_05.11.2026_18.04.04-prod-release.aab",
+        "aab_size_mb": 24.3
+      },
+      "progress": 50
     },
     {
       "id": "tramiune001_wallpaper",
