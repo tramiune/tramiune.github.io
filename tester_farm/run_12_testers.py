@@ -173,6 +173,25 @@ def apply_device_identity_props(serial: str, tester_cfg: dict):
     run_adb(serial, ["shell", "settings", "put", "system", "screen_off_timeout", "600000"])
 
 
+def trigger_rotating_proxy_if_configured(cfg: dict):
+    """If rotating_proxy is enabled in testers_config.json, calls rotate_api_url BEFORE booting a batch."""
+    rot = cfg.get("rotating_proxy", {})
+    if not rot.get("enabled"):
+        return
+    api_url = rot.get("rotate_api_url", "").strip()
+    wait_sec = int(rot.get("wait_after_rotate_sec", 6))
+    if api_url:
+        print(f"🔄 Calling Rotating Proxy API to get a fresh Sticky Residential IP...")
+        try:
+            req = urllib.request.Request(api_url, headers={"User-Agent": "curl/8.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = resp.read().decode("utf-8", errors="replace").strip()
+                print(f"   ✅ Rotate API response: {body[:140]}")
+        except Exception as e:
+            print(f"   ⚠️ Rotate API warning (continuing with current proxy IP): {e}")
+        time.sleep(wait_sec)
+
+
 def boot_avd(tester_cfg: dict, port: int, cfg: dict) -> tuple[str, subprocess.Popen]:
     """Boots an AVD on the given console port (e.g. 5554 -> emulator-5554) and returns (serial, process)."""
     emu_bin = get_emulator_bin(cfg)
@@ -193,10 +212,12 @@ def boot_avd(tester_cfg: dict, port: int, cfg: dict) -> tuple[str, subprocess.Po
         tester_cfg.get("timezone", "Asia/Ho_Chi_Minh"),
     ]
     proxy = tester_cfg.get("proxy", "").strip()
+    if not proxy and cfg.get("rotating_proxy", {}).get("enabled"):
+        proxy = cfg.get("rotating_proxy", {}).get("proxy_server", "").strip()
     if proxy:
         cmd.extend(["-http-proxy", proxy])
 
-    print(f"🚀 Booting [{avd_name}] ({tester_cfg['manufacturer']} {tester_cfg['model']}) on {serial}...")
+    print(f"🚀 Booting [{avd_name}] ({tester_cfg['manufacturer']} {tester_cfg['model']}) on {serial}" + (f" via Proxy [{proxy}]..." if proxy else "..."))
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return serial, proc
 
@@ -370,9 +391,38 @@ def filter_testers(cfg: dict, tester_id: int | None, group_code: str | None) -> 
     return testers
 
 
+def import_accounts_from_file(cfg: dict, file_path: str):
+    """Imports lines of `email | password | recovery_email` into testers_config.json starting from first unconfigured slot."""
+    p = Path(file_path).expanduser()
+    if not p.exists():
+        print(f"❌ File not found: {p}")
+        return
+    lines = [ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if "|" in ln or "@" in ln]
+    testers = cfg["testers"]
+    idx = 0
+    for t in testers:
+        # Keep already logged_in accounts unless user overwrites
+        if t.get("logged_in"):
+            continue
+        if idx >= len(lines):
+            break
+        parts = [x.strip() for x in lines[idx].split("|")]
+        t["email"] = parts[0]
+        if len(parts) > 1:
+            t["password"] = parts[1]
+        if len(parts) > 2:
+            t["recovery_email"] = parts[2]
+        idx += 1
+        print(f"✅ Mapped Tester #{t['id']:02d} ({t['avd_name']}) -> {t['email']} (Recovery: {t.get('recovery_email', '')})")
+
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    export_emails_csv(cfg)
+
+
 def run_login_wizard(cfg: dict, tester_id: int | None, group_code: str | None):
     target_testers = filter_testers(cfg, tester_id, group_code)
     for t in target_testers:
+        trigger_rotating_proxy_if_configured(cfg)
         serial, _ = boot_avd(t, 5554, cfg)
         if not wait_for_boot(serial):
             shutdown_avd(serial)
@@ -420,6 +470,7 @@ def run_install_wizard(cfg: dict, app_arg: str, tester_id: int | None, group_cod
     batch_size = 2
     for i in range(0, len(target_testers), batch_size):
         batch = target_testers[i : i + batch_size]
+        trigger_rotating_proxy_if_configured(cfg)
         booted = []
         for idx, t in enumerate(batch):
             port = 5554 + idx * 2
@@ -473,6 +524,7 @@ def run_daily_rolling_batch(
     for i in range(0, len(target_testers), batch_size):
         batch = target_testers[i : i + batch_size]
         print(f"\n🔄 --- BATCH {i // batch_size + 1} / {math.ceil(len(target_testers) / batch_size)}: {[t['avd_name'] for t in batch]} ---")
+        trigger_rotating_proxy_if_configured(cfg)
 
         booted = []
         for idx, t in enumerate(batch):
@@ -546,6 +598,7 @@ def main():
         choices=[
             "status",
             "export-emails",
+            "import-accounts",
             "check-ip",
             "login-wizard",
             "install-wizard",
@@ -560,8 +613,9 @@ def main():
     parser.add_argument("--app", default="all", help="App code ('002', '004', '005', '006', or 'all')")
     parser.add_argument("--duration", type=int, default=90, help="Session duration in seconds per app (default: 90s)")
     parser.add_argument("--batch-size", type=int, default=2, help="Number of AVDs to run simultaneously (default: 2 for 16GB RAM)")
-    parser.add_argument("--tester", type=int, default=None, help="Run only a specific tester ID (1..12)")
+    parser.add_argument("--tester", type=int, default=None, help="Run only a specific tester ID (1..15)")
     parser.add_argument("--group", type=str, default=None, help="Run only a specific network group ('A', 'B', or 'C')")
+    parser.add_argument("--accounts-file", type=str, default="accounts.txt", help="Path to text file with `email | pass | recovery_email` lines")
     args = parser.parse_args()
 
     cfg = load_config()
@@ -570,6 +624,8 @@ def main():
         print_status(cfg)
     elif args.action == "export-emails":
         export_emails_csv(cfg)
+    elif args.action == "import-accounts":
+        import_accounts_from_file(cfg, args.accounts_file)
     elif args.action == "check-ip":
         info = get_host_public_ip()
         print(json.dumps(info, indent=2, ensure_ascii=False))
