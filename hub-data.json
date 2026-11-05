@@ -1,5 +1,5 @@
 {
-  "server_time": "15:05 — 05/11/2026",
+  "server_time": "15:06 — 05/11/2026",
   "launch_targets": [
     {
       "app": "003 — Silly Smiles Wallpaper 4K",
@@ -393,8 +393,8 @@
         "exists_on_disk": true,
         "version_name": "1.0.0",
         "version_code": 100,
-        "aab_file": "LEDBanner_1.0.0_05.11.2026_14.33.04-prod-release.aab",
-        "aab_size_mb": 39.9
+        "aab_file": null,
+        "aab_size_mb": null
       },
       "progress": 40
     },
@@ -433,8 +433,8 @@
         "exists_on_disk": true,
         "version_name": "1.0.0",
         "version_code": 100,
-        "aab_file": null,
-        "aab_size_mb": null
+        "aab_file": "AIPhoto_1.0.0_05.11.2026_15.04.34-prod-release.aab",
+        "aab_size_mb": 35.1
       },
       "progress": 20
     },
