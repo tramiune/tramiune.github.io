@@ -372,8 +372,8 @@
       ],
       "live": {
         "exists_on_disk": true,
-        "version_name": "1.5.5",
-        "version_code": 155,
+        "version_name": "1.5.6",
+        "version_code": 156,
         "aab_file": "Wallpaper_1.5.5_05.11.2026_11.34.53-prod-release.aab",
         "aab_size_mb": 44.4
       },
