@@ -1,5 +1,5 @@
 {
-  "server_time": "15:09 — 05/11/2026",
+  "server_time": "15:11 — 05/11/2026",
   "launch_targets": [
     {
       "app": "003 — Silly Smiles Wallpaper 4K",
@@ -400,32 +400,32 @@
     },
     {
       "id": "tramiune004_ai_photo",
-      "name": "5. AI Photo Studio: Art & Restore (tramiune004)",
+      "name": "5. AI Photo Enhancer: Unblur & HD (tramiune004)",
       "folder": "tramiune004_ai_photo",
       "package_id": "com.tramiune004.app.aiphoto",
-      "stage": "DEVELOPMENT",
-      "status_badge": "🔵 CODE 07–09/11 -> SUBMIT (09/11) -> LÊN PRODUCTION (23/11)",
-      "target_dates": "Submit Tester: 09/11 (v1.0.0) | Update Ngày 7: 16/11 | Lên Production: 23/11/2026",
-      "during_wait_work": "Trong lúc 002 & 005 đã vào Tester (07–09/11): Dành trọn 3 ngày này code dứt điểm 004 và đưa vào Tester ngày 09/11. Trong 14 ngày chờ Tester của 004 (09/11 -> 23/11): Tối ưu tốc độ xử lý ảnh, thêm nút Report AI Content và làm bộ ảnh Before/After chạy Ads.",
+      "stage": "IN_REVIEW",
+      "status_badge": "🟢 ĐÃ BUILD AAB v1.0.0 (35MB) -> SUBMIT HÔM NAY (05/11) -> LÊN STORE (19/11)",
+      "target_dates": "Submit Tester: 05/11 (v1.0.0) | Update Ngày 7: 12/11 | Lên Production: 19/11/2026",
+      "during_wait_work": "Trong 14 ngày chờ Tester (05/11 -> 19/11): (1) Đấu nối thêm API AI thật vào AiPhotoRepositoryImpl.kt và đẩy bản phụ v1.0.1 vào ngày 12/11; (2) Quay 3 video Before/After 15s theo mẫu UpFoto/Remini để chuẩn bị chạy UAC.",
       "tasks": [
         {
-          "title": "Khởi tạo project com.tramiune004.app.aiphoto & đẩy lên GitHub",
+          "title": "Khởi tạo project com.tramiune004.app.aiphoto & hoàn thiện luồng Before/After Slider + AI Laser Scan",
           "done": true
         },
         {
-          "title": "Ngày 07/11 – 08/11: Code hoàn thiện luồng tạo ảnh AI, phục chế ảnh cũ & nút Report AI",
+          "title": "Cách ly Keystore riêng (83100e74...), gỡ specialUse FGS, tạo bộ ảnh Store Assets & Build AAB v1.0.0 (35MB)",
+          "done": true
+        },
+        {
+          "title": "Hôm nay (05/11): Tạo app trên Play Console, up AAB v1.0.0 & kích hoạt 20 Testers",
           "done": false
         },
         {
-          "title": "Ngày 09/11: Làm Store Listing, xuất AAB v1.0.0 (tắt Ads) & Submit vào 14 ngày Tester",
+          "title": "Ngày 12/11 (Ngày thứ 7 Tester): Đấu nối API AI thật & đẩy bản update phụ v1.0.1 lên Closed Testing",
           "done": false
         },
         {
-          "title": "Ngày 16/11 (Ngày thứ 7 Tester): Đẩy bản update phụ v1.0.1 lên Closed Testing",
-          "done": false
-        },
-        {
-          "title": "Ngày 23/11 (Đủ 14 ngày): Bấm Apply for Production",
+          "title": "Ngày 19/11 (Đủ 14 ngày): Bấm Apply for Production -> Lên Store & chạy UAC",
           "done": false
         }
       ],
@@ -436,7 +436,7 @@
         "aab_file": "AIPhoto_1.0.0_05.11.2026_15.04.34-prod-release.aab",
         "aab_size_mb": 35.1
       },
-      "progress": 20
+      "progress": 40
     },
     {
       "id": "tramiune006_glow_art",
