@@ -1,5 +1,5 @@
 {
-  "server_time": "15:25 — 05/11/2026",
+  "server_time": "15:29 — 05/11/2026",
   "launch_targets": [
     {
       "app": "001 — Live Wallpaper 4K",
@@ -52,14 +52,14 @@
       "goal_summary": "Đã hoàn tất code, Store Listing & xuất AAB 35MB! Up lên Closed Testing ngay hôm nay (05/11 -> 19/11)."
     },
     {
-      "app": "006 — Glow Art / App Thứ 6",
+      "app": "006 — Glow Art: Neon Spinner Draw",
       "folder": "tramiune006_glow_art",
-      "submit_date": "🔄 Đang làm hôm nay (05/11)",
-      "tester_window": "⏳ 06/11 → 20/11 (14 ngày Tester)",
-      "production_date": "🏆 20/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 23/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Chat 9008d95b đang code kèm cơ chế TesterEngagementEngine hỗ trợ vượt 12-20 Testers."
+      "submit_date": "✅ ĐÃ XONG AAB HÔM NAY (05/11 — 24MB)",
+      "tester_window": "⏳ 05/11 → 19/11 (Có Hệ thống Auto 12 Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + Hệ thống 2 Tầng vượt 12 Tester (TesterEngagementEngine.kt + run_12_testers.py) + Xuất AAB 24MB."
     }
   ],
   "master_timeline": [
@@ -192,14 +192,14 @@
       "goal_summary": "Đã hoàn tất code, Store Listing & xuất AAB 35MB! Up lên Closed Testing ngay hôm nay (05/11 -> 19/11)."
     },
     {
-      "app": "006 — Glow Art / App Thứ 6",
+      "app": "006 — Glow Art: Neon Spinner Draw",
       "folder": "tramiune006_glow_art",
-      "submit_date": "🔄 Đang làm hôm nay (05/11)",
-      "tester_window": "⏳ 06/11 → 20/11 (14 ngày Tester)",
-      "production_date": "🏆 20/11/2026 (Apply Production)",
-      "ads_live_date": "🎯 23/11/2026",
-      "status_color": "blue",
-      "goal_summary": "Chat 9008d95b đang code kèm cơ chế TesterEngagementEngine hỗ trợ vượt 12-20 Testers."
+      "submit_date": "✅ ĐÃ XONG AAB HÔM NAY (05/11 — 24MB)",
+      "tester_window": "⏳ 05/11 → 19/11 (Có Hệ thống Auto 12 Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "Đã hoàn thiện MVP + Hệ thống 2 Tầng vượt 12 Tester (TesterEngagementEngine.kt + run_12_testers.py) + Xuất AAB 24MB."
     }
   ],
   "projects": [
@@ -369,20 +369,28 @@
     },
     {
       "id": "tramiune006_glow_art",
-      "name": "6. Dự Án Thứ 6 (tramiune006 — Đang Code kèm TesterEngagementEngine)",
+      "name": "6. Glow Art: Neon Spinner Draw (tramiune006 — Đã tích hợp Hệ thống 12 Tester)",
       "folder": "tramiune006_glow_art",
       "package_id": "com.tramiune006.app.glowart",
-      "stage": "DEVELOPMENT",
-      "status_badge": "🔵 ĐANG CODE HÔM NAY (Chat 9008d95b)",
-      "target_dates": "Hoàn thiện AAB: 05–06/11 | Submit Tester: 06/11 | Lên Production: 20/11/2026",
-      "during_wait_work": "Đang tích hợp TesterEngagementEngine để hỗ trợ vượt qua kỳ kiểm tra 12-20 Testers của Google Play mượt mà nhất.",
+      "stage": "IN_REVIEW",
+      "status_badge": "✅ ĐÃ CÓ AAB 24MB + HỆ THỐNG AUTO 12 TESTER",
+      "target_dates": "Submit Tester: 05/11 (v1.0.0 — 24MB) | Update Ngày 7: 12/11 | Lên Production: 19/11/2026",
+      "during_wait_work": "Mỗi ngày chạy 1 lệnh `python3 tools/tester_farm/run_12_testers.py --action daily-run --app all --duration 95` để 12 máy tự mở app vẽ Mandala, xoay Spinner 3D 60fps và ghi nhận phiên tương tác thật trên Google Play Services.",
       "tasks": [
         {
-          "title": "Khởi tạo project tramiune006 & tích hợp TesterEngagementEngine",
-          "done": false
+          "title": "Code bộ vẽ đối xứng Mandala 6/8/12 trục + Vật lý Con quay 3D (RPM Meter) + Live Wallpaper 60fps",
+          "done": true
         },
         {
-          "title": "Xuất AAB v1.0.0 & đưa vào Closed Testing (06/11 -> 20/11)",
+          "title": "Xây dựng Hệ thống 2 Tầng vượt 12 Tester (TesterEngagementEngine.kt + tools/tester_farm/run_12_testers.py)",
+          "done": true
+        },
+        {
+          "title": "Tạo Keystore độc lập, tắt Ads mặc định, sinh Store Assets & Build xong GlowArt_1.0.0-prod-release.aab (24MB)",
+          "done": true
+        },
+        {
+          "title": "Submit lên Google Play Closed Testing & kích hoạt 12 Testers",
           "done": false
         }
       ],
@@ -390,10 +398,10 @@
         "exists_on_disk": true,
         "version_name": "1.0.0",
         "version_code": 100,
-        "aab_file": null,
-        "aab_size_mb": null
+        "aab_file": "GlowArt_1.0.0_05.11.2026_15.25.30-prod-release.aab",
+        "aab_size_mb": 24.2
       },
-      "progress": 0
+      "progress": 75
     }
   ],
   "docs": [
