@@ -3,7 +3,7 @@
   "avd_dir": "/Users/finn/.android/avd",
   "system_image": "system-images/android-37.1/google_apis_playstore_ps16k/arm64-v8a/",
   "target_api": "android-37.1",
-  "batch_size": 2,
+  "batch_size": 1,
   "rotating_proxy": {
     "enabled": true,
     "provider": "ThueCloud_DCVN1",

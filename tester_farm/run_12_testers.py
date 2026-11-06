@@ -629,12 +629,12 @@ def run_login_wizard(cfg: dict, tester_id: int | None, group_code: str | None):
         shutdown_avd(serial)
 
 
-def run_install_wizard(cfg: dict, app_arg: str, tester_id: int | None, group_code: str | None):
+def run_install_wizard(cfg: dict, app_arg: str, tester_id: int | None, group_code: str | None, batch_size: int = 1):
     target_testers = filter_testers(cfg, tester_id, group_code)
     apps = cfg["apps"]
     target_apps = list(apps.keys()) if app_arg == "all" else [app_arg]
 
-    batch_size = 2
+    batch_size = max(1, int(batch_size or cfg.get("batch_size", 1)))
     for i in range(0, len(target_testers), batch_size):
         batch = target_testers[i : i + batch_size]
         trigger_rotating_proxy_if_configured(cfg)
@@ -793,8 +793,8 @@ def main():
         help="Farm action to execute",
     )
     parser.add_argument("--app", default="all", help="App code ('002', '004', '005', '006', '007', or 'all')")
-    parser.add_argument("--duration", type=int, default=90, help="Session duration in seconds per app (default: 90s)")
-    parser.add_argument("--batch-size", type=int, default=2, help="Number of AVDs to run simultaneously (default: 2 for 16GB RAM)")
+    parser.add_argument("--duration", type=int, default=75, help="Session duration in seconds per app (default: 75s)")
+    parser.add_argument("--batch-size", type=int, default=1, help="Number of AVDs to run simultaneously (default: 1 = 1 machine per unique Proxy IP)")
     parser.add_argument("--tester", type=int, default=None, help="Run only a specific tester ID (1..15)")
     parser.add_argument("--group", type=str, default=None, help="Run only a specific network group ('A', 'B', or 'C')")
     parser.add_argument("--accounts-file", type=str, default="accounts.txt", help="Path to text file with `email | pass | recovery_email` lines")
@@ -831,7 +831,7 @@ def main():
     elif args.action == "login-wizard":
         run_login_wizard(cfg, args.tester, args.group)
     elif args.action == "install-wizard":
-        run_install_wizard(cfg, args.app, args.tester, args.group)
+        run_install_wizard(cfg, args.app, args.tester, args.group, args.batch_size)
     elif args.action == "daily-batch":
         run_daily_rolling_batch(cfg, args.app, args.duration, args.batch_size, args.tester, args.group)
     elif args.action in ("open-play", "feedback", "daily-run"):
