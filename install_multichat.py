@@ -416,20 +416,45 @@ def setup_workspace(workspace_dir: Path):
     hooks_path.write_text(json.dumps(hooks_cfg, indent=2, ensure_ascii=False), encoding="utf-8")
 
     shared_mem_path = state_dir / "SHARED_MEMORY.md"
-    if not shared_mem_path.is_file():
-        # Try pulling Tramiune shared memory if available online
-        try:
-            with urllib.request.urlopen("https://tramiune.github.io/SHARED_MEMORY.md", timeout=4) as r:
-                shared_mem_path.write_text(r.read().decode("utf-8"), encoding="utf-8")
-        except Exception:
+    try:
+        with urllib.request.urlopen("https://tramiune.github.io/SHARED_MEMORY.md", timeout=6) as r:
+            shared_mem_path.write_text(r.read().decode("utf-8"), encoding="utf-8")
+    except Exception:
+        if not shared_mem_path.is_file():
             shared_mem_path.write_text(
                 f"# Shared Project Memory (`{workspace_dir.name}`)\n\nBộ nhớ chung giữa tất cả các luồng chat trong project `{workspace_dir}`.\n",
                 encoding="utf-8",
             )
 
+    # Pull PROJECTS_PLAN.json & OFFICE_CHATS.md so the home machine knows 100% of office progress & chat history
+    for remote_name in ("PROJECTS_PLAN.json", "OFFICE_CHATS.md"):
+        try:
+            with urllib.request.urlopen(f"https://tramiune.github.io/{remote_name}", timeout=6) as r:
+                (state_dir / remote_name).write_text(r.read().decode("utf-8"), encoding="utf-8")
+        except Exception:
+            pass
+
+    # Pull tools/tester_farm scripts & config so the home machine can immediately run 12 testers
+    tf_dir = workspace_dir / "tools" / "tester_farm"
+    tf_dir.mkdir(parents=True, exist_ok=True)
+    for tf_file in ("provision_12_avds.py", "run_12_testers.py", "testers_config.json", "testers_emails.csv", "PLAYBOOK_12_TESTERS.md"):
+        target_tf = tf_dir / tf_file
+        if not target_tf.is_file():
+            try:
+                with urllib.request.urlopen(f"https://tramiune.github.io/tester_farm/{tf_file}", timeout=6) as r:
+                    target_tf.write_bytes(r.read())
+                if tf_file.endswith(".py"):
+                    target_tf.chmod(0o755)
+            except Exception:
+                pass
+
     active_chats_path = state_dir / "ACTIVE_CHATS.md"
     if not active_chats_path.is_file():
-        active_chats_path.write_text(f"# Active & Recent Chats in `{workspace_dir.name}`\n", encoding="utf-8")
+        office_chats = state_dir / "OFFICE_CHATS.md"
+        if office_chats.is_file():
+            active_chats_path.write_text(office_chats.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            active_chats_path.write_text(f"# Active & Recent Chats in `{workspace_dir.name}`\n", encoding="utf-8")
 
     agents_md_path = workspace_dir / "AGENTS.md"
     if not agents_md_path.is_file():

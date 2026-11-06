@@ -1,0 +1,231 @@
+{
+  "updated_at": "2026-11-05T17:12:00+07:00",
+  "launch_targets": [
+    {
+      "app": "001 — Live Wallpaper 4K",
+      "folder": "tramiune001_wallpaper",
+      "submit_date": "✅ Đã Submit v1.5.5 (05/11)",
+      "tester_window": "Đã qua 14 ngày",
+      "production_date": "🎯 Đang chờ Play duyệt v1.5.5",
+      "ads_live_date": "✅ ADMOB ĐÃ DUYỆT XANH (No issues found!)",
+      "status_color": "green",
+      "goal_summary": "🎉 AdMob đã gỡ sạch 3 lỗi (15:15 ngày 05/11). Ngay khi bản 1.5.5 Live trên Play là bật lại Ads thu tiền."
+    },
+    {
+      "app": "003 — Silly Smiles Wallpaper 4K",
+      "folder": "tramiune003_wallpaper_silly",
+      "submit_date": "✅ Đã Live v1.3.0 (05/11)",
+      "tester_window": "Đã qua 14 ngày",
+      "production_date": "✅ ĐÃ LÊN PRODUCTION",
+      "ads_live_date": "⏳ Đang chờ AdMob duyệt lại (Sau khi tắt RemoteConfig)",
+      "status_color": "green",
+      "goal_summary": "Đã Live trên Play! Đang chờ AdMob gỡ cờ Restricted -> Bật lại Ads Firebase & chạy UAC với 12 Video Win."
+    },
+    {
+      "app": "004 — AI Photo Enhancer: Unblur & HD",
+      "folder": "tramiune004_ai_photo",
+      "submit_date": "✅ ĐÃ SUBMIT LÊN CHỢ (05/11)",
+      "tester_window": "🔥 05/11 → 19/11 (Tối nay Add Tester — Ngày 1/14)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã Submit v1.0.0 lên Console! Tối nay add 12-15 Testers (4 trên máy KYG02 + dàn máy ảo) -> Đếm 14 ngày tới 19/11."
+    },
+    {
+      "app": "005 — LED Banner: Edge Lighting RGB",
+      "folder": "tramiune005_led_banner",
+      "submit_date": "✅ ĐÃ SUBMIT LÊN CHỢ (05/11)",
+      "tester_window": "🔥 05/11 → 19/11 (Tối nay Add Tester — Ngày 1/14)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã Submit v1.0.0 lên Console! Tối nay add 12-15 Testers chạy 14 ngày liên tục -> 19/11 bấm Apply Production."
+    },
+    {
+      "app": "006 — Glow Art: Neon Spinner Draw",
+      "folder": "tramiune006_glow_art",
+      "submit_date": "✅ ĐÃ SUBMIT LÊN CHỢ (05/11)",
+      "tester_window": "🔥 05/11 → 19/11 (Tối nay Add Tester — Ngày 1/14)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã Submit v1.0.0 lên Console! Tối nay add 12-15 Testers chạy 14 ngày liên tục -> 19/11 bấm Apply Production."
+    },
+    {
+      "app": "002 — AR Drawing: Sketch & Paint",
+      "folder": "tramiune002_ar",
+      "submit_date": "✅ Đã Build v1.1.4 (05/11)",
+      "tester_window": "⏳ 05/11 → 19/11 (14 ngày Tester)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "yellow",
+      "goal_summary": "Đã fix sạch Families Policy & có AAB v1.1.4. Chạy song song 14 ngày Tester để lên Production đợt 19/11."
+    },
+    {
+      "app": "007 — Rolling Icon: 3D Gravity & Pet",
+      "folder": "tramiune007_rolling_icon",
+      "submit_date": "✅ ĐÃ CÓ AAB v1.0.0 (05/11) — Sẵn sàng Submit!",
+      "tester_window": "🔥 05/11 → 19/11 (Chạy chung dàn 12-15 Testers với 004, 005, 006)",
+      "production_date": "🏆 19/11/2026 (Apply Production)",
+      "ads_live_date": "🎯 22/11/2026",
+      "status_color": "green",
+      "goal_summary": "✅ Đã hoàn thiện 100% code Vật lý Trọng lực 2D + Shimeji Screen Pets, Store Listing, Privacy Policy & xuất AAB 24MB! Có thể Submit ngay để chạy chung đợt 14 ngày Tester tối nay."
+    }
+  ],
+  "master_timeline": [
+    {
+      "phase": "GIAI ĐOẠN 1: Tối Hôm Nay (05/11/2026) — Kích Hoạt Lò 14 Ngày Tester Cho Cả 3 App (004, 005, 006)",
+      "goal": "🎯 MỤC TIÊU TỐI NAY: Add danh sách Email Tester trên Console & Bấm Opt-in cài đặt đủ 12–15 Testers cho 004, 005, 006",
+      "highlight": true,
+      "tasks": [
+        {"done": true, "text": "[XONG 100%] Đã hoàn thiện code, Keystore riêng, Store Listing, Privacy Policy, Data Safety và SUBMIT cả 3 app (004_ai_photo, 005_led_banner, 006_glow_art) lên Google Play Console!"},
+        {"done": true, "text": "[XONG 100%] 001_wallpaper đã được AdMob gỡ sạch 3 lỗi ('No issues found') & 003_wallpaper_silly đã Live trên Google Play Production."},
+        {"done": false, "text": "[TỐI NAY 05/11 — BƯỚC 1] Khi Google Play duyệt xong bản Closed Testing của 004, 005, 006 -> Copy link Opt-in Web/Android của cả 3 app."},
+        {"done": false, "text": "[TỐI NAY 05/11 — BƯỚC 2] Trên máy thật KYG02: Chia 4 tài khoản Gmail vào 4 không gian độc lập (User 0 + Private Space + Work Profile + User phụ) rồi bấm Opt-in & tải cả 3 app."},
+        {"done": false, "text": "[TỐI NAY 05/11 — BƯỚC 3] Chạy dàn Máy ảo CH Play (`tools/tester_farm/run_12_testers.py --mode daily-batch`) đăng nhập các Gmail còn lại -> Opt-in & mở tương tác cả 3 app để bắt đầu đếm Ngày 1/14 (05/11 -> 19/11)."}
+      ]
+    },
+    {
+      "phase": "GIAI ĐOẠN 2: Ngày 06/11 – 11/11/2026 (Tuần 1 Chạy 14 Ngày Tester của 004, 005, 006)",
+      "goal": "🎯 MỤC TIÊU: Duy trì chạy script Tester 15 phút mỗi tối + Bật kiếm tiền 001 & 003 + Code tiếp App 007 (Rolling Icon 3D)",
+      "highlight": false,
+      "tasks": [
+        {"done": false, "text": "[MỖI TỐI 15 PHÚT] Chạy `python3 tools/tester_farm/run_12_testers.py --mode daily-batch` (cuốn chiếu 2 máy ảo/lượt) + mở sơ qua 3 app trên máy KYG02 để giữ chuỗi 14 ngày liên tục."},
+        {"done": false, "text": "[06/11 – 07/11] Khi 001_wallpaper (v1.5.5) Live trên Play & 003_wallpaper_silly được AdMob gỡ cờ -> Bật lại ENABLE_ALL_ADS = true trên Firebase Remote Config để thu tiền."},
+        {"done": false, "text": "[07/11 – 09/11] Tận dụng thời gian rảnh khi 004, 005, 006 đang chạy Tester: Khởi tạo & code tiếp `tramiune007_rolling_icon` (Rolling Icon 3D & Screen Pets ~270K tải/tháng) -> Submit ngày 09/11."},
+        {"done": false, "text": "[10/11 – 11/11] Quay/dựng sẵn bộ Video Ads (3-4 video/app) cho 003, 004, 005 để chuẩn bị sẵn nguyên liệu chạy Google Ads UAC."}
+      ]
+    },
+    {
+      "phase": "GIAI ĐOẠN 3: Ngày 12/11/2026 (Mốc Vàng Ngày Thứ 7 Tester của 004, 005, 006)",
+      "goal": "🎯 MỤC TIÊU: Đẩy 1 bản Update phụ (v1.0.1 / versionCode 101) cho cả 004, 005, 006 để đậu Production 100% ở ngày 14",
+      "highlight": false,
+      "tasks": [
+        {"done": false, "text": "[12/11 — BẮT BUỘC] Nâng versionCode từ 100 -> 101 (v1.0.1) cho cả 3 app (004_ai_photo, 005_led_banner, 006_glow_art), build AAB và up lên nhánh Closed Testing kèm Release Notes sửa lỗi/tối ưu."},
+        {"done": false, "text": "[12/11 – 18/11] Tiếp tục duy trì mở app hàng ngày trên dàn Tester cho tới khi chạm mốc 14/14 ngày."}
+      ]
+    },
+    {
+      "phase": "GIAI ĐOẠN 4: Ngày 19/11 – 22/11/2026 (Mùa Thu Hoạch — Đưa Đồng Loạt 004, 005, 006 Lên Production)",
+      "goal": "🎯 MỤC TIÊU: Bấm Apply for Production đồng loạt ngày 19/11 + Verify AdMob + Bật RemoteConfig Ads kiếm tiền",
+      "highlight": false,
+      "tasks": [
+        {"done": false, "text": "[19/11/2026] 🏆 Cả 3 app (004_ai_photo, 005_led_banner, 006_glow_art) tròn 14 ngày Tester -> Bấm nút 'Apply for Production' trên Google Play Console."},
+        {"done": false, "text": "[21/11 – 22/11/2026] Sau khi Google Play duyệt 004, 005, 006 lên Production -> Liên kết app trên AdMob -> Bật ENABLE_ALL_ADS = true trên Firebase Remote Config & vít camp UAC!"}
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "tramiune004_ai_photo",
+      "name": "1. AI Photo Enhancer: Unblur & HD (tramiune004)",
+      "folder": "tramiune004_ai_photo",
+      "package_id": "com.tramiune004.app.aiphoto",
+      "stage": "IN_REVIEW",
+      "status_badge": "🔥 ĐÃ SUBMIT (05/11) -> TỐI NAY ADD TESTER (05/11 -> 19/11)",
+      "target_dates": "Đã Submit: 05/11 (v1.0.0) | Update Ngày 7 (v1.0.1): 12/11 | Apply Production: 19/11/2026",
+      "during_wait_work": "Trong 14 ngày chạy Tester (05/11 -> 19/11): (1) Chạy tương tác hàng ngày qua Tester Farm; (2) Ngày 12/11 tăng versionCode lên 101 đẩy bản v1.0.1 lên Closed Track; (3) Chuẩn bị 4 video quảng cáo dạng Kéo thanh trượt Before/After phục chế ảnh cũ bị mờ.",
+      "tasks": [
+        {"title": "Hoàn thiện AI Laser Scan, Before/After Slider, 8 chế độ AI, Keystore riêng & xuất AAB 35MB", "done": true},
+        {"title": "Tạo Store Listing, Privacy Policy, khai báo Data Safety & Submit lên Google Play Console (05/11)", "done": true},
+        {"title": "Tối nay (05/11): Add danh sách Email Tester & bấm Opt-in cài đặt trên máy KYG02 + dàn máy ảo", "done": false},
+        {"title": "Ngày 12/11 (Ngày thứ 7 Tester): Build & up bản phụ v1.0.1 (versionCode 101) lên Closed Track", "done": false},
+        {"title": "Ngày 19/11 (Đủ 14 ngày): Bấm Apply for Production -> Duyệt Live & bật Ads", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune005_led_banner",
+      "name": "2. LED Banner: Edge Lighting RGB (tramiune005)",
+      "folder": "tramiune005_led_banner",
+      "package_id": "com.tramiune005.app.ledbanner",
+      "stage": "IN_REVIEW",
+      "status_badge": "🔥 ĐÃ SUBMIT (05/11) -> TỐI NAY ADD TESTER (05/11 -> 19/11)",
+      "target_dates": "Đã Submit: 05/11 (v1.0.0) | Update Ngày 7 (v1.0.1): 12/11 | Apply Production: 19/11/2026",
+      "during_wait_work": "Trong 14 ngày chạy Tester (05/11 -> 19/11): (1) Chạy tương tác hàng ngày qua Tester Farm; (2) Ngày 12/11 đẩy bản update phụ v1.0.1 (thêm mẫu preset chữ chạy & viền RGB mới); (3) Quay 4 video điện thoại phát sáng bảng LED & viền RGB trong phòng tối theo đúng 12 Video Win.",
+      "tasks": [
+        {"title": "Hoàn thiện LedBannerRenderer + EdgeLightingRenderer, Keystore riêng & xuất AAB 35MB", "done": true},
+        {"title": "Tạo Store Listing, Privacy Policy, khai báo Data Safety & Submit lên Google Play Console (05/11)", "done": true},
+        {"title": "Tối nay (05/11): Add danh sách Email Tester & bấm Opt-in cài đặt trên máy KYG02 + dàn máy ảo", "done": false},
+        {"title": "Ngày 12/11 (Ngày thứ 7 Tester): Build & up bản phụ v1.0.1 (versionCode 101) lên Closed Track", "done": false},
+        {"title": "Ngày 19/11 (Đủ 14 ngày): Bấm Apply for Production -> Duyệt Live & chạy UAC", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune006_glow_art",
+      "name": "3. Glow Art: Neon Spinner Draw (tramiune006)",
+      "folder": "tramiune006_glow_art",
+      "package_id": "com.tramiune006.app.glowart",
+      "stage": "IN_REVIEW",
+      "status_badge": "🔥 ĐÃ SUBMIT (05/11) -> TỐI NAY ADD TESTER (05/11 -> 19/11)",
+      "target_dates": "Đã Submit: 05/11 (v1.0.0) | Update Ngày 7 (v1.0.1): 12/11 | Apply Production: 19/11/2026",
+      "during_wait_work": "Trong 14 ngày chạy Tester (05/11 -> 19/11): (1) TesterEngagementEngine tự động sinh hành vi vẽ & quay Spinner mỗi ngày; (2) Ngày 12/11 đẩy bản update phụ v1.0.1; (3) Quay 3 video ASMR vẽ vài nét Neon rồi vuốt xoay thành con quay phát sáng.",
+      "tasks": [
+        {"title": "Hoàn thiện bộ vẽ Mandala Neon 6/8/12 trục + Vật lý Fidget Spinner 3D + TesterEngagementEngine & xuất AAB 24MB", "done": true},
+        {"title": "Tạo Store Listing, Privacy Policy, khai báo Data Safety & Submit lên Google Play Console (05/11)", "done": true},
+        {"title": "Tối nay (05/11): Add danh sách Email Tester & bấm Opt-in cài đặt trên máy KYG02 + dàn máy ảo", "done": false},
+        {"title": "Ngày 12/11 (Ngày thứ 7 Tester): Build & up bản phụ v1.0.1 (versionCode 101) lên Closed Track", "done": false},
+        {"title": "Ngày 19/11 (Đủ 14 ngày): Bấm Apply for Production -> Duyệt Live & bật Ads", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune007_rolling_icon",
+      "name": "4. Rolling Icon: 3D Gravity & Pet (tramiune007)",
+      "folder": "tramiune007_rolling_icon",
+      "package_id": "com.tramiune007.app.rollingicon",
+      "stage": "IN_REVIEW",
+      "status_badge": "✅ ĐÃ CÓ AAB 24MB (v1.0.0) + STORE LISTING — SẴN SÀNG SUBMIT!",
+      "target_dates": "Build xong: 05/11 (v1.0.0) | Update Ngày 7 (v1.0.1): 12/11 | Apply Production: 19/11/2026",
+      "during_wait_work": "Submit luôn lên Google Play Console để gộp chạy chung đợt 14 ngày Tester (05/11 -> 19/11) với 004, 005, 006 trên máy KYG02 + dàn 12 máy ảo!",
+      "tasks": [
+        {"title": "Hoàn thiện Vật lý Trọng lực 2D (Accelerometer Tilt + Drag/Fling/Shake/Vortex) + 6 Shimeji Screen Pets + Live Wallpaper 60fps", "done": true},
+        {"title": "Tạo Keystore riêng, fix sạch AdMob Site Behavior: Navigation, tạo Store Listing + Privacy Policy (privacy-policy-007.html) & xuất AAB 24MB", "done": true},
+        {"title": "Tạo app trên Google Play Console & Submit bản v1.0.0 vào nhánh Closed Testing", "done": false},
+        {"title": "Chạy chung dàn 12-15 Testers (05/11 -> 19/11) & đẩy bản phụ v1.0.1 ở Ngày thứ 7 (12/11)", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune001_wallpaper",
+      "name": "4. Wallpapers: Live Wallpaper 4K (tramiune001)",
+      "folder": "tramiune001_wallpaper",
+      "package_id": "com.tramiune001.app.wallpaper",
+      "stage": "LIVE_STORE",
+      "status_badge": "🎉 ADMOB ĐÃ DUYỆT XANH — CHỜ BẢN 1.5.5 LIVE TRÊN PLAY",
+      "target_dates": "AdMob đã gỡ sạch 3 lỗi (05/11) | Ngay khi Play duyệt bản 1.5.5 là bật lại Ads",
+      "during_wait_work": "AdMob đã báo 'App review: No issue(s) found'. Đợi Google Play duyệt xong bản 1.5.5 là vào Firebase Remote Config bật lại ENABLE_ALL_ADS = true.",
+      "tasks": [
+        {"title": "Tắt Ads mặc định, nâng SDK 36, xuất file AAB v1.5.5 (code 155)", "done": true},
+        {"title": "Kháng nghị thành công cả 3 lỗi trên AdMob ('No issues found' ngày 05/11)", "done": true},
+        {"title": "Đợi Google Play duyệt bản 1.5.5 -> Bật lại Ads trên Firebase Remote Config", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune003_wallpaper_silly",
+      "name": "5. Silly Smiles Live Wallpaper 4K (tramiune003)",
+      "folder": "tramiune003_wallpaper_silly",
+      "package_id": "com.tramiune003.app.wallpaper.silly",
+      "stage": "LIVE_STORE",
+      "status_badge": "🟢 ĐÃ LIVE PRODUCTION (v1.3.0) — ĐANG KHÁNG LẠI ADMOB",
+      "target_dates": "Đã Live Play: 05/11 | Chờ AdMob gỡ cờ Restricted -> Bật lại Ads & vít UAC",
+      "during_wait_work": "Giữ ENABLE_ALL_ADS = false trên Firebase Console cho tới khi AdMob gửi mail 'No issues found', sau đó bật lại true và chạy quảng cáo UAC với 12 Video Win.",
+      "tasks": [
+        {"title": "Đưa bản v1.3.0 (code 130) lên Google Play Production thành công", "done": true},
+        {"title": "Tắt ENABLE_ALL_ADS = false trên Firebase Console & gửi lại Request Review trên AdMob", "done": true},
+        {"title": "Khi AdMob báo 'No issues found' -> Bật lại ENABLE_ALL_ADS = true & chạy camp UAC", "done": false}
+      ]
+    },
+    {
+      "id": "tramiune002_ar",
+      "name": "6. AR Drawing: Sketch & Paint (tramiune002)",
+      "folder": "tramiune002_ar",
+      "package_id": "com.tramiune002.app.ar",
+      "stage": "IN_REVIEW",
+      "status_badge": "🟡 ĐÃ CÓ AAB v1.1.4 (Sạch Families Policy)",
+      "target_dates": "Chạy 14 ngày Tester cùng dàn máy -> Lên Production 19/11/2026",
+      "during_wait_work": "Có thể cài luôn lên cùng dàn Tester tối nay để chạy song song 14 ngày.",
+      "tasks": [
+        {"title": "Fix lỗi Families Policy & xuất file AAB v1.1.4 (code 114)", "done": true},
+        {"title": "Chạy 14 ngày Tester & đẩy bản phụ ở Ngày thứ 7 (12/11)", "done": false}
+      ]
+    }
+  ]
+}

@@ -629,7 +629,7 @@ def print_status(cfg: dict):
     print(f"🌐 CURRENT NETWORK IP : {ip_info.get('ip', 'UNKNOWN')} ({ip_info.get('org', '')} | {ip_info.get('city', '')})")
     print(f"🔌 LIVE ADB DEVICES   : {len(connected)} currently running ({', '.join(connected) if connected else 'None'})")
     print("=" * 95)
-    print(f"{'ID':<4} {'AVD Name':<20} {'Device Profile':<20} {'Tester Email':<28} {'Net Group':<20} {'002 | 004 | 005 | 006 (Days/14)'}")
+    print(f"{'ID':<4} {'AVD Name':<20} {'Device Profile':<20} {'Tester Email':<28} {'Net Group':<20} {'002 | 004 | 005 | 006 | 007 (Days/14)'}")
     print("-" * 95)
 
     for t in cfg["testers"]:
@@ -639,7 +639,7 @@ def print_status(cfg: dict):
         net = t.get("network_group", "")[:19]
 
         counts = []
-        for app_key in ["002", "004", "005", "006"]:
+        for app_key in ["002", "004", "005", "006", "007"]:
             days = len(state.get(app_key, {}).get(avd, []))
             counts.append(f"{days:02d}d")
         progress_str = " | ".join(counts)

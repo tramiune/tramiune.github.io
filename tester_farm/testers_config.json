@@ -35,6 +35,12 @@
       "name": "Glow Art: Neon Spinner Draw",
       "splash": "com.tramiune.app.base.ui.splash.SplashActivity",
       "optin_url": "https://play.google.com/apps/testing/com.tramiune006.app.glowart"
+    },
+    "007": {
+      "package": "com.tramiune007.app.rollingicon",
+      "name": "Rolling Icon: 3D Gravity & Pet",
+      "splash": "com.tramiune.app.base.ui.splash.SplashActivity",
+      "optin_url": "https://play.google.com/apps/testing/com.tramiune007.app.rollingicon"
     }
   },
   "testers": [
