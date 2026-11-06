@@ -85,14 +85,15 @@
       "lcd_height": 2400,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": true
     },
     {
       "id": 3,
       "avd_name": "Tramiune_Tester_03",
-      "email": "tester03.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "tamvinhphuoc70@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_A_Home_WiFi",
       "proxy": "",
       "manufacturer": "Xiaomi",
@@ -102,14 +103,15 @@
       "lcd_height": 2400,
       "lcd_density": 440,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 4,
       "avd_name": "Tramiune_Tester_04",
-      "email": "tester04.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "phatminhtram@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_A_Home_WiFi",
       "proxy": "",
       "manufacturer": "Samsung",
@@ -119,14 +121,15 @@
       "lcd_height": 2340,
       "lcd_density": 400,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 5,
       "avd_name": "Tramiune_Tester_05",
-      "email": "tester05.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "lamhoaitrung94@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_A_Home_WiFi",
       "proxy": "",
       "manufacturer": "OnePlus",
@@ -136,14 +139,15 @@
       "lcd_height": 2412,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 6,
       "avd_name": "Tramiune_Tester_06",
-      "email": "tester06.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "mocloanchau@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_B_4G_Hotspot_1",
       "proxy": "",
       "manufacturer": "OPPO",
@@ -153,14 +157,15 @@
       "lcd_height": 2412,
       "lcd_density": 400,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 7,
       "avd_name": "Tramiune_Tester_07",
-      "email": "tester07.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "hoachinhsang@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_B_4G_Hotspot_1",
       "proxy": "",
       "manufacturer": "vivo",
@@ -170,14 +175,15 @@
       "lcd_height": 2400,
       "lcd_density": 440,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 8,
       "avd_name": "Tramiune_Tester_08",
-      "email": "tester08.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "minhphattan266@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_B_4G_Hotspot_1",
       "proxy": "",
       "manufacturer": "realme",
@@ -187,14 +193,15 @@
       "lcd_height": 2412,
       "lcd_density": 400,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 9,
       "avd_name": "Tramiune_Tester_09",
-      "email": "tester09.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "datdongdo46@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_B_4G_Hotspot_1",
       "proxy": "",
       "manufacturer": "motorola",
@@ -204,14 +211,15 @@
       "lcd_height": 2400,
       "lcd_density": 400,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 10,
       "avd_name": "Tramiune_Tester_10",
-      "email": "tester10.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "huatrongdan@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_B_4G_Hotspot_1",
       "proxy": "",
       "manufacturer": "Nothing",
@@ -221,14 +229,15 @@
       "lcd_height": 2412,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 11,
       "avd_name": "Tramiune_Tester_11",
-      "email": "tester11.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "tungmanhtrieu@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_C_4G_Hotspot_2",
       "proxy": "",
       "manufacturer": "Sony",
@@ -238,14 +247,15 @@
       "lcd_height": 2520,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 12,
       "avd_name": "Tramiune_Tester_12",
-      "email": "tester12.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "dinhphonghoa529@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_C_4G_Hotspot_2",
       "proxy": "",
       "manufacturer": "asus",
@@ -255,14 +265,15 @@
       "lcd_height": 2400,
       "lcd_density": 440,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     },
     {
       "id": 13,
       "avd_name": "Tramiune_Tester_13",
-      "email": "tester13.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "sonchinhgiang@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_C_4G_Hotspot_2",
       "proxy": "",
       "manufacturer": "Samsung",
@@ -272,14 +283,15 @@
       "lcd_height": 2340,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 14,
       "avd_name": "Tramiune_Tester_14",
-      "email": "tester14.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "phonghieutu04@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_C_4G_Hotspot_2",
       "proxy": "",
       "manufacturer": "Xiaomi",
@@ -289,14 +301,15 @@
       "lcd_height": 2400,
       "lcd_density": 440,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "vi-VN"
+      "locale": "vi-VN",
+      "logged_in": false
     },
     {
       "id": 15,
       "avd_name": "Tramiune_Tester_15",
-      "email": "tester15.tramiune@gmail.com",
-      "password": "",
-      "recovery_email": "",
+      "email": "khaitammoc752@gmail.com",
+      "password": "Sinh2000@",
+      "recovery_email": "thangkho97py@gmail.com",
       "network_group": "Group_C_4G_Hotspot_2",
       "proxy": "",
       "manufacturer": "Google",
@@ -306,7 +319,27 @@
       "lcd_height": 2400,
       "lcd_density": 420,
       "timezone": "Asia/Ho_Chi_Minh",
-      "locale": "en-US"
+      "locale": "en-US",
+      "logged_in": false
     }
+  ],
+  "all_tester_emails": [
+    "lantran1432001@gmail.com",
+    "minhthuhoan23@gmail.com",
+    "tamvinhphuoc70@gmail.com",
+    "phatminhtram@gmail.com",
+    "lamhoaitrung94@gmail.com",
+    "mocloanchau@gmail.com",
+    "hoachinhsang@gmail.com",
+    "minhphattan266@gmail.com",
+    "datdongdo46@gmail.com",
+    "huatrongdan@gmail.com",
+    "tungmanhtrieu@gmail.com",
+    "dinhphonghoa529@gmail.com",
+    "sonchinhgiang@gmail.com",
+    "phonghieutu04@gmail.com",
+    "khaitammoc752@gmail.com",
+    "longthuyminh57@gmail.com",
+    "longminhthu080@gmail.com"
   ]
 }
