@@ -5,11 +5,19 @@
   "target_api": "android-37.1",
   "batch_size": 2,
   "rotating_proxy": {
-    "enabled": false,
-    "proxy_server": "",
-    "rotate_api_url": "",
+    "enabled": true,
+    "provider": "ThueCloud_DCVN1",
+    "resource_id": "TC15489_53193",
+    "proxy_server": "http://mznpn_trade:X57Ck6Xq@117.0.205.30:43288",
+    "raw_http_proxy": "117.0.205.30:43288:mznpn_trade:X57Ck6Xq",
+    "raw_socks5_proxy": "117.0.205.30:21565:mznpn_trade:X57Ck6Xq",
+    "api_key": "v5n915n1tce434a5cc30bb9e9afc32a4c0f2728e2ca1bb3a505c5fc",
+    "rotate_api_url": "https://api.thuecloud.com/getip/bc29396ff994a30f88ea0dcefb6614a796a60e5a",
+    "min_rotate_interval_sec": 245,
     "wait_after_rotate_sec": 6,
-    "_comment": "Điền proxy_server (vd: http://ip:port hoặc http://user:pass@ip:port) và rotate_api_url (link API đổi IP của KiotProxy/TMProxy/WWProxy/Proxyno1) rồi bật enabled: true. Script sẽ tự động xoay IP mới TRƯỚC khi bật mỗi lượt máy ảo và giữ nguyên IP đó suốt phiên chạy!"
+    "wait_for_cooldown_on_batch": true,
+    "expires_at": "2026-12-06",
+    "_comment": "Proxy Dân Cư Việt Nam (ThueCloud DCVN1 - Viettel AS7552). Tự động xoay IP mới trước mỗi batch (tuân thủ cooldown 240s của ThueCloud để không bao giờ bị khóa tài khoản do spam API) và giữ Sticky IP suốt phiên chạy máy ảo."
   },
   "apps": {
     "002": {

@@ -35,6 +35,7 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import threading
@@ -108,17 +109,64 @@ def get_avd_name_for_serial(serial: str) -> str:
     return lines[0] if lines else serial
 
 
-def get_host_public_ip() -> dict:
+def normalize_proxy_url(raw_proxy: str) -> str:
+    """
+    Converts either 'host:port:user:pass' (ThueCloud format) or 'http://user:pass@host:port'
+    into standard 'http://user:pass@host:port' for Android Emulator -http-proxy & curl.
+    """
+    s = (raw_proxy or "").strip()
+    if not s:
+        return ""
+    if s.startswith("http://") or s.startswith("https://") or s.startswith("socks5://"):
+        return s
+    parts = s.split(":")
+    if len(parts) == 4:
+        host, port, user, pw = parts
+        return f"http://{user}:{pw}@{host}:{port}"
+    if len(parts) == 2:
+        host, port = parts
+        return f"http://{host}:{port}"
+    return f"http://{s}"
+
+
+def get_active_proxy_url(cfg: dict, tester_cfg: dict | None = None) -> str:
+    if tester_cfg and tester_cfg.get("proxy", "").strip():
+        return normalize_proxy_url(tester_cfg["proxy"])
+    rot = cfg.get("rotating_proxy", {})
+    if rot.get("enabled"):
+        raw = rot.get("proxy_server") or rot.get("raw_http_proxy") or ""
+        return normalize_proxy_url(raw)
+    return ""
+
+
+def get_host_public_ip(proxy_url: str = "") -> dict:
+    if proxy_url:
+        try:
+            out = subprocess.check_output(
+                ["curl", "-s", "-x", proxy_url, "https://ipinfo.io/json", "--max-time", "10"],
+                stderr=subprocess.DEVNULL,
+            ).decode("utf-8", errors="replace").strip()
+            if out and out.startswith("{"):
+                data = json.loads(out)
+                if data.get("ip"):
+                    data["via_proxy"] = True
+                    return data
+        except Exception:
+            pass
     try:
         req = urllib.request.Request("https://ipinfo.io/json", headers={"User-Agent": "curl/8.0"})
         with urllib.request.urlopen(req, timeout=6) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            data = json.loads(resp.read().decode("utf-8"))
+            data["via_proxy"] = False
+            return data
     except Exception:
         try:
             with urllib.request.urlopen("https://api.ipify.org?format=json", timeout=6) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                data = json.loads(resp.read().decode("utf-8"))
+                data["via_proxy"] = False
+                return data
         except Exception as e:
-            return {"ip": "UNKNOWN", "error": str(e)}
+            return {"ip": "UNKNOWN", "error": str(e), "via_proxy": False}
 
 
 def get_screen_size(serial: str) -> tuple[int, int]:
@@ -173,23 +221,87 @@ def apply_device_identity_props(serial: str, tester_cfg: dict):
     run_adb(serial, ["shell", "settings", "put", "system", "screen_off_timeout", "600000"])
 
 
-def trigger_rotating_proxy_if_configured(cfg: dict):
-    """If rotating_proxy is enabled in testers_config.json, calls rotate_api_url BEFORE booting a batch."""
+def trigger_rotating_proxy_if_configured(cfg: dict, wait_for_cooldown: bool | None = None) -> dict:
+    """
+    Calls ThueCloud / Rotating Proxy API safely BEFORE booting a batch.
+    Respects ThueCloud's 240s cooldown (`min_rotate_interval_sec = 245`) so the account is NEVER banned for spamming.
+    Returns the active outgoing public IP dict through the proxy.
+    """
     rot = cfg.get("rotating_proxy", {})
     if not rot.get("enabled"):
-        return
+        return get_host_public_ip()
+
     api_url = rot.get("rotate_api_url", "").strip()
     wait_sec = int(rot.get("wait_after_rotate_sec", 6))
+    min_interval = int(rot.get("min_rotate_interval_sec", 245))
+    if wait_for_cooldown is None:
+        wait_for_cooldown = bool(rot.get("wait_for_cooldown_on_batch", True))
+
+    state = load_state()
+    last_rot_ts = float(state.get("last_proxy_rotate_epoch", 0.0))
+    now_ts = time.time()
+    elapsed = now_ts - last_rot_ts
+
+    if last_rot_ts > 0 and elapsed < min_interval:
+        rem = int(math.ceil(min_interval - elapsed))
+        if wait_for_cooldown and rem <= 180:
+            print(f"⏳ Waiting {rem}s for ThueCloud proxy cooldown (240s rule) before rotating IP...")
+            time.sleep(rem)
+        elif not wait_for_cooldown:
+            proxy_url = get_active_proxy_url(cfg)
+            ip_data = get_host_public_ip(proxy_url)
+            print(f"ℹ️ Proxy cooldown active ({rem}s remaining). Using current Sticky Proxy IP: {ip_data.get('ip')} ({ip_data.get('org', '')})")
+            return ip_data
+
     if api_url:
-        print(f"🔄 Calling Rotating Proxy API to get a fresh Sticky Residential IP...")
+        print(f"🔄 Calling ThueCloud Rotating Proxy API for a fresh Vietnamese Residential IP...")
         try:
             req = urllib.request.Request(api_url, headers={"User-Agent": "curl/8.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=12) as resp:
                 body = resp.read().decode("utf-8", errors="replace").strip()
-                print(f"   ✅ Rotate API response: {body[:140]}")
+            try:
+                j = json.loads(body)
+            except Exception:
+                j = {}
+
+            # Update proxy credentials if returned in payload
+            proxy_obj = j.get("proxy") if isinstance(j.get("proxy"), dict) else {}
+            if proxy_obj.get("httpProxy"):
+                rot["raw_http_proxy"] = proxy_obj["httpProxy"]
+                rot["proxy_server"] = normalize_proxy_url(proxy_obj["httpProxy"])
+
+            if j.get("status") == "error" or j.get("statusCode") == 400:
+                err_msg = j.get("error", body[:140])
+                m = re.search(r"đợi\s+(\d+)\s+giây", err_msg, flags=re.IGNORECASE)
+                if m:
+                    wait_cooldown = int(m.group(1)) + 4
+                    state["last_proxy_rotate_epoch"] = time.time() - (min_interval - wait_cooldown)
+                    save_state(state)
+                    if wait_for_cooldown and wait_cooldown <= 190:
+                        print(f"   ⏳ ThueCloud requested {wait_cooldown}s cooldown wait. Sleeping {wait_cooldown}s then rotating once...")
+                        time.sleep(wait_cooldown)
+                        with urllib.request.urlopen(urllib.request.Request(api_url, headers={"User-Agent": "curl/8.0"}), timeout=12) as r2:
+                            b2 = r2.read().decode("utf-8", errors="replace").strip()
+                        print(f"   ✅ Rotate API response after cooldown: {b2[:140]}")
+                        state["last_proxy_rotate_epoch"] = time.time()
+                        save_state(state)
+                        time.sleep(wait_sec)
+                    else:
+                        print(f"   ℹ️ ThueCloud cooldown ({err_msg}) — keeping current active Residential IP.")
+                else:
+                    print(f"   ⚠️ Rotate API message: {err_msg}")
+            else:
+                print(f"   ✅ Rotate API success: {body[:140]}")
+                state["last_proxy_rotate_epoch"] = time.time()
+                save_state(state)
+                time.sleep(wait_sec)
         except Exception as e:
             print(f"   ⚠️ Rotate API warning (continuing with current proxy IP): {e}")
-        time.sleep(wait_sec)
+
+    proxy_url = get_active_proxy_url(cfg)
+    ip_data = get_host_public_ip(proxy_url)
+    print(f"🌐 Active Proxy Outgoing IP: {ip_data.get('ip', 'UNKNOWN')} ({ip_data.get('org', '')} | {ip_data.get('city', '')})")
+    return ip_data
 
 
 def boot_avd(tester_cfg: dict, port: int, cfg: dict) -> tuple[str, subprocess.Popen]:
@@ -211,9 +323,7 @@ def boot_avd(tester_cfg: dict, port: int, cfg: dict) -> tuple[str, subprocess.Po
         "-timezone",
         tester_cfg.get("timezone", "Asia/Ho_Chi_Minh"),
     ]
-    proxy = tester_cfg.get("proxy", "").strip()
-    if not proxy and cfg.get("rotating_proxy", {}).get("enabled"):
-        proxy = cfg.get("rotating_proxy", {}).get("proxy_server", "").strip()
+    proxy = get_active_proxy_url(cfg, tester_cfg)
     if proxy:
         cmd.extend(["-http-proxy", proxy])
 
@@ -570,18 +680,24 @@ def run_daily_rolling_batch(
     apps = cfg["apps"]
     target_apps = list(apps.keys()) if app_arg == "all" else [app_arg]
 
-    ip_info = get_host_public_ip()
-    current_ip = ip_info.get("ip", "UNKNOWN")
-    org_info = ip_info.get("org", "")
+    host_ip_info = get_host_public_ip()
+    proxy_url = get_active_proxy_url(cfg)
+    proxy_ip_info = get_host_public_ip(proxy_url) if proxy_url else host_ip_info
+    current_ip = proxy_ip_info.get("ip", "UNKNOWN")
+    org_info = proxy_ip_info.get("org", "")
     print("=" * 84)
-    print(f"🌐 Current Network Public IP: {current_ip} ({org_info})")
+    print(f"🌐 Host Direct IP     : {host_ip_info.get('ip', 'UNKNOWN')} ({host_ip_info.get('org', '')})")
+    if proxy_url:
+        print(f"🛡️ Active Proxy IP    : {current_ip} ({org_info}) via [{proxy_url}]")
     print(f"🤖 Starting Daily Rolling Batch: {len(target_testers)} Testers | Batch Size: {batch_size} | Apps: {', '.join(target_apps)}")
     print("=" * 84)
 
     for i in range(0, len(target_testers), batch_size):
         batch = target_testers[i : i + batch_size]
         print(f"\n🔄 --- BATCH {i // batch_size + 1} / {math.ceil(len(target_testers) / batch_size)}: {[t['avd_name'] for t in batch]} ---")
-        trigger_rotating_proxy_if_configured(cfg)
+        rot_ip_info = trigger_rotating_proxy_if_configured(cfg)
+        if rot_ip_info and rot_ip_info.get("ip"):
+            current_ip = rot_ip_info["ip"]
 
         booted = []
         for idx, t in enumerate(batch):
@@ -622,11 +738,17 @@ def run_daily_rolling_batch(
 
 def print_status(cfg: dict):
     state = load_state()
-    ip_info = get_host_public_ip()
+    host_ip = get_host_public_ip()
+    proxy_url = get_active_proxy_url(cfg)
+    proxy_ip = get_host_public_ip(proxy_url) if proxy_url else {}
     connected = get_connected_devices()
 
     print("=" * 95)
-    print(f"🌐 CURRENT NETWORK IP : {ip_info.get('ip', 'UNKNOWN')} ({ip_info.get('org', '')} | {ip_info.get('city', '')})")
+    print(f"🌐 HOST DIRECT IP     : {host_ip.get('ip', 'UNKNOWN')} ({host_ip.get('org', '')} | {host_ip.get('city', '')})")
+    if proxy_url:
+        print(f"🛡️ ROTATING PROXY IP  : {proxy_ip.get('ip', 'UNKNOWN')} ({proxy_ip.get('org', '')} | {proxy_ip.get('city', '')}) [ENABLED]")
+    else:
+        print(f"🛡️ ROTATING PROXY IP  : DISABLED")
     print(f"🔌 LIVE ADB DEVICES   : {len(connected)} currently running ({', '.join(connected) if connected else 'None'})")
     print("=" * 95)
     print(f"{'ID':<4} {'AVD Name':<20} {'Device Profile':<20} {'Tester Email':<28} {'Net Group':<20} {'002 | 004 | 005 | 006 | 007 (Days/14)'}")
@@ -657,6 +779,7 @@ def main():
             "export-emails",
             "import-accounts",
             "check-ip",
+            "rotate-ip",
             "login-wizard",
             "install-wizard",
             "daily-batch",
@@ -669,7 +792,7 @@ def main():
         default="status",
         help="Farm action to execute",
     )
-    parser.add_argument("--app", default="all", help="App code ('002', '004', '005', '006', or 'all')")
+    parser.add_argument("--app", default="all", help="App code ('002', '004', '005', '006', '007', or 'all')")
     parser.add_argument("--duration", type=int, default=90, help="Session duration in seconds per app (default: 90s)")
     parser.add_argument("--batch-size", type=int, default=2, help="Number of AVDs to run simultaneously (default: 2 for 16GB RAM)")
     parser.add_argument("--tester", type=int, default=None, help="Run only a specific tester ID (1..15)")
@@ -694,8 +817,17 @@ def main():
         for p_serial in phys:
             manage_real_phone_multi_users(p_serial, mode, args.app, cfg, args.duration)
     elif args.action == "check-ip":
-        info = get_host_public_ip()
+        proxy_url = get_active_proxy_url(cfg)
+        info = {
+            "host_direct_ip": get_host_public_ip(),
+            "proxy_enabled": bool(proxy_url),
+            "proxy_server": proxy_url,
+            "proxy_outgoing_ip": get_host_public_ip(proxy_url) if proxy_url else None,
+        }
         print(json.dumps(info, indent=2, ensure_ascii=False))
+    elif args.action == "rotate-ip":
+        res = trigger_rotating_proxy_if_configured(cfg, wait_for_cooldown=False)
+        print(json.dumps(res, indent=2, ensure_ascii=False))
     elif args.action == "login-wizard":
         run_login_wizard(cfg, args.tester, args.group)
     elif args.action == "install-wizard":

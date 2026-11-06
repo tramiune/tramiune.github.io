@@ -434,19 +434,18 @@ def setup_workspace(workspace_dir: Path):
         except Exception:
             pass
 
-    # Pull tools/tester_farm scripts & config so the home machine can immediately run 12 testers
+    # Pull tools/tester_farm scripts & config (always update to latest including Rotating Proxy)
     tf_dir = workspace_dir / "tools" / "tester_farm"
     tf_dir.mkdir(parents=True, exist_ok=True)
     for tf_file in ("provision_12_avds.py", "run_12_testers.py", "testers_config.json", "testers_emails.csv", "PLAYBOOK_12_TESTERS.md"):
         target_tf = tf_dir / tf_file
-        if not target_tf.is_file():
-            try:
-                with urllib.request.urlopen(f"https://tramiune.github.io/tester_farm/{tf_file}", timeout=6) as r:
-                    target_tf.write_bytes(r.read())
-                if tf_file.endswith(".py"):
-                    target_tf.chmod(0o755)
-            except Exception:
-                pass
+        try:
+            with urllib.request.urlopen(f"https://tramiune.github.io/tester_farm/{tf_file}", timeout=6) as r:
+                target_tf.write_bytes(r.read())
+            if tf_file.endswith(".py"):
+                target_tf.chmod(0o755)
+        except Exception:
+            pass
 
     active_chats_path = state_dir / "ACTIVE_CHATS.md"
     if not active_chats_path.is_file():
