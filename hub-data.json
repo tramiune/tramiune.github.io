@@ -1,5 +1,5 @@
 {
-  "server_time": "15:40 — 06/11/2026",
+  "server_time": "15:45 — 06/11/2026",
   "launch_targets": [
     {
       "app": "001 — Live Wallpaper 4K",
@@ -340,8 +340,8 @@
       ],
       "live": {
         "exists_on_disk": true,
-        "version_name": "1.0.0",
-        "version_code": 100,
+        "version_name": "1.0.1",
+        "version_code": 101,
         "aab_file": "GlowArt_1.0.0_05.11.2026_15.25.30-prod-release.aab",
         "aab_size_mb": 24.2
       },
