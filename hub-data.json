@@ -1,5 +1,5 @@
 {
-  "server_time": "16:41 — 10/11/2026",
+  "server_time": "16:44 — 10/11/2026",
   "launch_targets": [
     {
       "app": "001 — Live Wallpaper 4K",
@@ -260,10 +260,10 @@
       ],
       "live": {
         "exists_on_disk": true,
-        "version_name": "1.0.1",
-        "version_code": 101,
-        "aab_file": "AIPhoto_1.0.0_05.11.2026_15.04.34-prod-release.aab",
-        "aab_size_mb": 35.1
+        "version_name": "1.0.2",
+        "version_code": 102,
+        "aab_file": "AIPhoto_1.0.1_10.11.2026_16.40.07-prod-release.aab",
+        "aab_size_mb": 40.5
       },
       "progress": 40
     },
